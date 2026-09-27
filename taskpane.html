@@ -1,0 +1,58 @@
+<!doctype html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<meta http-equiv="X-UA-Compatible" content="IE=Edge">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Pièces justificatives – Snips</title>
+<link rel="stylesheet" href="taskpane.css">
+<!-- Office.js : bibliothèque Microsoft obligatoire pour tout add-in (chargée par Excel) -->
+<script src="https://appsforoffice.microsoft.com/lib/1/hosted/office.js"></script>
+</head>
+<body>
+<header id="top">
+  <div class="row">
+    <label class="btn primary" title="Sélectionner le dossier « pièces triées » (ou le dossier de la mission)">
+      📁 Pièces
+      <input id="pickDir" type="file" webkitdirectory directory multiple hidden>
+    </label>
+    <label class="btn" title="Sélectionner des fichiers PDF (si le choix de dossier n'est pas disponible)">
+      + PDF
+      <input id="pickFiles" type="file" accept="application/pdf" multiple hidden>
+    </label>
+    <span id="docCount" class="muted">0 pièce</span>
+    <span class="spacer"></span>
+    <button id="btnSnips" class="btn" title="Liste des snips du classeur">☰ Snips</button>
+  </div>
+  <div class="row tools" role="toolbar" aria-label="Outils de snip">
+    <button class="tool" data-type="texte" title="Snip texte : recopie dans la cellule la valeur encadrée">T Texte</button>
+    <button class="tool" data-type="somme" title="Snip somme : additionne les montants encadrés">Σ Somme</button>
+    <button class="tool" data-type="valide" title="Snip validation : coche la cellule et lie la zone">✓ Validé</button>
+    <button class="tool" data-type="exception" title="Snip exception : marque une anomalie et lie la zone">✗ Exception</button>
+    <button id="btnDelSnip" class="btn small" title="Supprimer le snip de la cellule sélectionnée">🗑</button>
+  </div>
+  <div id="cellInfo" class="cellinfo">Sélectionnez une cellule dans Excel.</div>
+  <div id="tabs" class="tabs"></div>
+  <div class="row nav">
+    <select id="docSelect" title="Toutes les pièces chargées"><option value="">— choisir une pièce —</option></select>
+  </div>
+  <div class="row nav">
+    <button id="prevPage" class="btn small" title="Page précédente">◀</button>
+    <span id="pageInfo" class="muted">–</span>
+    <button id="nextPage" class="btn small" title="Page suivante">▶</button>
+    <span class="spacer"></span>
+    <button id="zoomOut" class="btn small" title="Zoom -">−</button>
+    <span id="zoomInfo" class="muted">100 %</span>
+    <button id="zoomIn" class="btn small" title="Zoom +">+</button>
+    <button id="zoomFit" class="btn small" title="Ajuster à la largeur">↔</button>
+  </div>
+  <div id="msg" class="msg" role="status" aria-live="polite"></div>
+</header>
+<main id="viewer" tabindex="0"></main>
+<aside id="snipPanel" hidden>
+  <div class="row"><strong>Snips du classeur</strong><span class="spacer"></span><button id="closeSnips" class="btn small">✕</button></div>
+  <div id="snipList"></div>
+</aside>
+<script type="module" src="js/app.js"></script>
+</body>
+</html>
