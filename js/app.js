@@ -1,13 +1,21 @@
 // Volet « Pièces justificatives » : visionneuse liée aux cellules + snips façon DataSnipper.
-import { Viewer } from "./viewer.js";
-import * as store from "./store.js";
-import { textInRect, numbersIn, valueFromText, round2, searchVariants } from "./extract.js";
+import { Viewer } from "./viewer.js?v=2";
+import * as store from "./store.js?v=2";
+import { textInRect, numbersIn, valueFromText, round2, searchVariants } from "./extract.js?v=2";
 
 const $ = s => document.querySelector(s);
-const XL = window.__MOCK__ ? await import("./excel-mock.js") : await import("./excel-bridge.js");
+const XL = window.__MOCK__ ? await import("./excel-mock.js?v=2") : await import("./excel-bridge.js?v=2");
 
-const S = { files: [], liens: new Map(), snips: [], sel: null, ref: null, tool: null, tabs: [], busy: false };
-const LABEL = { texte: "T", somme: "Σ", valide: "✓", exception: "✗" };
+const S = { files: [], liens: new Map(), snips: [], idx: new Map(), zones: [], sel: null, ref: null, tool: null, tabs: [], busy: false };
+const LABEL = { texte: "T", somme: "Σ", valide: "✓", exception: "✗", auto: "◆" };
+// Index des snips par cellule (manuels d'abord, puis zones automatiques)
+function indexSnips() {
+  S.idx = new Map();
+  for (const s of S.snips) { const k = s.sheet + "|" + s.cell; if (!S.idx.has(k)) S.idx.set(k, []); S.idx.get(k).push(s); }
+  for (const l of S.idx.values()) l.sort((a, b) => (a.type === "auto") - (b.type === "auto"));
+}
+async function loadSnips() { S.snips = await XL.readSnips(); indexSnips(); }
+const manual = () => S.snips.filter(s => s.type !== "auto");
 const TYPE_FR = { texte: "texte", somme: "somme", valide: "validation", exception: "exception" };
 
 function msg(t, kind = "") { const m = $("#msg"); m.textContent = t; m.className = "msg " + kind; }
@@ -55,10 +63,13 @@ async function openDoc(name, page = 1, rect = null) {
 // ---------- Surlignages : snips de la pièce ouverte + résultats de recherche
 let searchHits = [];
 function paintHighlights(focus) {
-  const list = S.snips.filter(s => s.file === viewer.name).map(s => ({
+  const list = manual().filter(s => s.file === viewer.name && !S.zones.includes(s)).map(s => ({
     page: s.page, rect: s.rect, cls: s.type, label: `${LABEL[s.type]} ${s.cell}`,
     focus: !!focus && focus.page === s.page && focus.rect.join() === s.rect.join()
   }));
+  // zones de la cellule sélectionnée (encadrées et mises en évidence)
+  S.zones.filter(z => z.file === viewer.name).forEach(z => list.push({ page: z.page, rect: z.rect, cls: z.type, focus: true,
+    label: z.type === "auto" ? (z.text || "Donnée") : `${LABEL[z.type]} ${z.cell}` }));
   searchHits.forEach(h => list.push({ page: h.page, rect: h.rect, cls: "search" }));
   viewer.setHighlights(list);
 }
@@ -80,11 +91,16 @@ function shortRole(r) {
   if (t.includes("od")) return "OD";
   return r.slice(0, 14);
 }
+function roleOf(file) { const t = S.tabs.find(x => x.file === file); return t ? shortRole(t.role) : file.replace(/\.pdf$/i, "").slice(0, 18); }
 function renderTabs() {
   const el = $("#tabs");
-  if (!S.tabs.length) { el.innerHTML = ""; return; }
-  el.innerHTML = S.tabs.map((t, i) => `<button class="tab ${t.file === viewer.name ? "active" : ""}" data-i="${i}" title="${esc(t.role)} – ${esc(t.file)}">${esc(shortRole(t.role))} <span class="p">p.${t.page}</span></button>`).join("");
+  const zf = [...new Set(S.zones.map(z => z.file))];
+  const zoneBar = zf.length ? `<div class="zbar">◆ Donnée dans : ` + zf.map((f, i) => { const n = S.zones.filter(z => z.file === f).length;
+      return `<button class="zchip ${f === viewer.name ? "active" : ""}" data-z="${i}" title="${esc(f)}">${esc(roleOf(f))}${n > 1 ? " ×" + n : ""}</button>`; }).join("") + `</div>` : "";
+  if (!S.tabs.length && !zoneBar) { el.innerHTML = ""; return; }
+  el.innerHTML = zoneBar + S.tabs.map((t, i) => `<button class="tab ${t.file === viewer.name ? "active" : ""}" data-i="${i}" title="${esc(t.role)} – ${esc(t.file)}">${esc(shortRole(t.role))} <span class="p">p.${t.page}</span></button>`).join("");
   el.querySelectorAll(".tab").forEach(b => b.onclick = () => { const t = S.tabs[+b.dataset.i]; openDoc(t.file, t.page); });
+  el.querySelectorAll(".zchip").forEach(b => b.onclick = () => { const f = zf[+b.dataset.z]; const z = S.zones.find(x => x.file === f); openDoc(f, z.page, z.rect); });
 }
 
 // ---------- Sélection d'une cellule dans Excel
@@ -92,18 +108,25 @@ async function onSelection() {
   let sel;
   try { sel = await XL.getSelection(); } catch (e) { return; }
   S.sel = sel;
-  const snip = S.snips.find(s => s.sheet === sel.sheet && s.cell === sel.cell);
+  const zones = S.idx.get(sel.sheet + "|" + sel.cell) || [];
+  const snip = zones.find(z => z.type !== "auto");
   const hdr = String(sel.header || "").replace(/\n/g, " ");
+  const nfiles = new Set(zones.map(z => z.file)).size;
   $("#cellInfo").innerHTML = `<b>${esc(sel.sheet)}!${esc(sel.cell)}</b> ${hdr ? "· " + esc(hdr.slice(0, 60)) : ""}<br>${esc(fmt(sel.value)).slice(0, 120) || "<span class='muted'>(vide)</span>"}` +
-    (snip ? `<br><span style="color:var(--${snip.type})">● Snip ${TYPE_FR[snip.type]} – ${esc(snip.file)} p.${snip.page}</span>` : "");
+    (snip ? `<br><span style="color:var(--${snip.type})">● Snip ${TYPE_FR[snip.type]} – ${esc(snip.file)} p.${snip.page}</span>` : "") +
+    (zones.length && !snip ? `<br><span style="color:var(--auto)">◆ ${zones.length} zone${zones.length > 1 ? "s" : ""} dans ${nfiles} pièce${nfiles > 1 ? "s" : ""}</span>` : "");
 
   // Écriture de la ligne → pièces liées
   const ref = (sel.rowValues || []).map(v => String(v ?? "").trim()).find(v => S.liens.has(v)) || null;
   S.ref = ref; S.tabs = ref ? S.liens.get(ref) : [];
-  searchHits = [];
+  S.zones = zones; searchHits = [];
 
-  // 1) la cellule porte un snip → pièce + zone
-  if (snip) { await openDoc(snip.file, snip.page, snip.rect); return; }
+  // 1) la cellule a des zones (snip manuel ou zone automatique) → pièce + zone(s) encadrée(s)
+  if (zones.length) {
+    const z = zones[0];
+    if (await openDoc(z.file, z.page, z.rect)) msg(nfiles > 1 ? `Donnée localisée dans ${nfiles} pièces : cliquez sur les pastilles ◆ pour passer de l'une à l'autre.` : "");
+    return;
+  }
   // 2) la cellule est un lien « ▶ … p.X » → cette pièce, cette page
   const m = /HYPERLINK\(\s*"([^"]+)"\s*[,;]\s*"[^"]*?p\.(\d+)/i.exec(String(sel.formula || ""));
   if (m) { await openDoc(base(m[1]), +m[2]); return; }
@@ -111,13 +134,14 @@ async function onSelection() {
   if (ref) {
     const already = S.tabs.find(t => t.file === viewer.name);
     const t = already || S.tabs[0];
-    if (!already) { if (!(await openDoc(t.file, t.page))) return; } else renderTabs();
-  } else renderTabs();
+    if (!already) { if (!(await openDoc(t.file, t.page))) return; } else { paintHighlights(null); renderTabs(); }
+  } else { paintHighlights(null); renderTabs(); }
   // 4) recherche de la valeur de la cellule dans la pièce ouverte
   if (viewer.name) {
     searchHits = await viewer.search(searchVariants(sel.value));
     paintHighlights(null);
     if (searchHits.length) { viewer.goto(searchHits[0].page, searchHits[0].rect); msg(`Valeur trouvée ${searchHits.length} fois dans la pièce (surlignée en jaune).`); }
+    else if (ref) msg("Pas de zone liée à cette cellule (donnée de calcul ou pièce non fournie).");
   }
 }
 
@@ -141,7 +165,7 @@ async function createSnip(page, rect) {
     let ocr = false;
     if (!text && (type === "texte" || type === "somme")) {
       msg("Zone scannée : lecture OCR en cours…");
-      const { ocrCanvas } = await import("./ocr.js");
+      const { ocrCanvas } = await import("./ocr.js?v=2");
       text = await ocrCanvas(await viewer.regionCanvas(page, rect)); ocr = true;
     }
     let value;
@@ -150,7 +174,7 @@ async function createSnip(page, rect) {
     else value = type === "valide" ? "✓" : "✗";
     const rec = { id: (crypto.randomUUID ? crypto.randomUUID() : String(Date.now())), sheet: sel.sheet, cell: sel.cell, type, file: viewer.name, page, rect: rect.map(x => Math.round(x * 100) / 100), value, text: text + (ocr ? " [OCR]" : ""), date: new Date().toLocaleString("fr-FR") };
     const res = await XL.saveSnip(rec, value);
-    S.snips = await XL.readSnips();
+    await loadSnips();
     paintHighlights({ page, rect: rec.rect });
     let t = `Snip ${TYPE_FR[type]} → ${sel.sheet}!${sel.cell}`;
     if (type === "texte" || type === "somme") t += ` = ${fmt(value)}`;
@@ -165,18 +189,20 @@ async function onSelectionInfoOnly() { const keep = searchHits; await onSelectio
 $("#btnDelSnip").addEventListener("click", async () => {
   const sel = await XL.getSelection();
   const ok = await XL.deleteSnip(sel.sheet, sel.cell);
-  S.snips = await XL.readSnips(); paintHighlights(null);
+  await loadSnips(); paintHighlights(null);
   msg(ok ? `Snip supprimé de ${sel.sheet}!${sel.cell}.` : "Aucun snip sur la cellule sélectionnée.", ok ? "ok" : "err");
 });
 
 // ---------- Liste des snips
 function renderSnipList() {
   const el = $("#snipList");
-  if (!S.snips.length) { el.innerHTML = `<p class="muted">Aucun snip. Sélectionnez une cellule, choisissez un outil (T, Σ, ✓, ✗) puis encadrez la zone sur la pièce.</p>`; return; }
-  el.innerHTML = S.snips.map((s, i) => `<div class="snip ${s.type}" data-i="${i}"><b>${LABEL[s.type]} ${esc(s.sheet)}!${esc(s.cell)}</b> ${s.type === "texte" || s.type === "somme" ? "= " + esc(fmt(s.value)) : ""}<div class="f">${esc(s.file)} · p.${s.page} · ${esc(s.date)}</div></div>`).join("");
-  el.querySelectorAll(".snip").forEach(d => d.onclick = async () => { const s = S.snips[+d.dataset.i]; await XL.selectCell(s.sheet, s.cell); await openDoc(s.file, s.page, s.rect); });
+  const L = manual(); const nauto = S.snips.length - L.length;
+  const head = nauto ? `<p class="muted">${nauto} zones automatiques liées aux cellules de la table (non listées).</p>` : "";
+  if (!L.length) { el.innerHTML = head + `<p class="muted">Aucun snip manuel. Sélectionnez une cellule, choisissez un outil (T, Σ, ✓, ✗) puis encadrez la zone sur la pièce.</p>`; return; }
+  el.innerHTML = head + L.map((s, i) => `<div class="snip ${s.type}" data-i="${i}"><b>${LABEL[s.type]} ${esc(s.sheet)}!${esc(s.cell)}</b> ${s.type === "texte" || s.type === "somme" ? "= " + esc(fmt(s.value)) : ""}<div class="f">${esc(s.file)} · p.${s.page} · ${esc(s.date)}</div></div>`).join("");
+  el.querySelectorAll(".snip").forEach(d => d.onclick = async () => { const s = L[+d.dataset.i]; await XL.selectCell(s.sheet, s.cell); await openDoc(s.file, s.page, s.rect); });
 }
-$("#btnSnips").addEventListener("click", async () => { S.snips = await XL.readSnips(); renderSnipList(); $("#snipPanel").hidden = false; });
+$("#btnSnips").addEventListener("click", async () => { await loadSnips(); renderSnipList(); $("#snipPanel").hidden = false; });
 $("#closeSnips").addEventListener("click", () => { $("#snipPanel").hidden = true; });
 
 // ---------- Navigation
@@ -193,9 +219,9 @@ $("#zoomFit").onclick = () => viewer.fitWidth();
     if (!info || info.host !== (window.Office && Office.HostType ? Office.HostType.Excel : "Excel")) { msg("Ce volet doit être ouvert depuis Excel.", "err"); }
     await refreshFiles();
     try { S.liens = await XL.readLiens(); } catch (e) { S.liens = new Map(); }
-    try { S.snips = await XL.readSnips(); } catch (e) { S.snips = []; }
+    try { await loadSnips(); } catch (e) { S.snips = []; }
     XL.onSelection(() => onSelection().catch(e => msg(e.message, "err")));
-    msg(S.files.length ? `${S.liens.size} écritures liées · ${S.snips.length} snip(s) dans le classeur.` : "Cliquez sur 📁 Pièces et sélectionnez le dossier « pièces triées ».");
+    msg(S.files.length ? `${S.liens.size} écritures liées · ${manual().length} snip(s) · ${S.snips.length - manual().length} zones automatiques.` : "Cliquez sur 📁 Pièces et sélectionnez le dossier « pièces triées ».");
     await onSelection();
     window.__app_ready = true;
   } catch (e) { msg("Erreur au démarrage : " + e.message, "err"); window.__app_error = e.message; }

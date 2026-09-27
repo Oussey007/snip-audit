@@ -88,7 +88,7 @@ export async function saveSnip(rec, writeValue) {
     const u = ws.getUsedRange(); u.load("values,rowCount");
     await ctx.sync();
     const rows = u.values;
-    let idx = rows.findIndex((r, i) => i > 0 && r[1] === rec.sheet && r[2] === rec.cell);
+    let idx = rows.findIndex((r, i) => i > 0 && r[1] === rec.sheet && r[2] === rec.cell && r[3] !== "auto");
     const prevFill = idx > 0 ? rows[idx][13] : (target.format.fill.color || "");
     const hasFormula = typeof target.formulas[0][0] === "string" && target.formulas[0][0].startsWith("=");
     const current = target.values[0][0];
@@ -113,7 +113,7 @@ export async function deleteSnip(sheet, cell) {
     const ws = ctx.workbook.worksheets.getItemOrNullObject(SNIP_SHEET);
     await ctx.sync(); if (ws.isNullObject) return false;
     const u = ws.getUsedRange(); u.load("values"); await ctx.sync();
-    const idx = u.values.findIndex((r, i) => i > 0 && r[1] === sheet && r[2] === cell);
+    const idx = u.values.findIndex((r, i) => i > 0 && r[1] === sheet && r[2] === cell && r[3] !== "auto");
     if (idx < 1) return false;
     const prev = u.values[idx][13];
     const target = ctx.workbook.worksheets.getItem(sheet).getRange(cell);

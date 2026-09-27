@@ -24,7 +24,7 @@ export async function readLiens() {
 }
 export async function readSnips() { return (M.snips || []).map(s => ({ ...s })); }
 export async function saveSnip(rec, writeValue) {
-  M.snips = (M.snips || []).filter(s => !(s.sheet === rec.sheet && s.cell === rec.cell));
+  M.snips = (M.snips || []).filter(s => !(s.sheet === rec.sheet && s.cell === rec.cell && s.type !== "auto"));
   const c = cell(rec.sheet, rec.cell);
   const hasFormula = typeof c.f === "string" && c.f.startsWith("=");
   let written = false;
@@ -39,7 +39,7 @@ export async function saveSnip(rec, writeValue) {
 }
 export async function deleteSnip(sheet, a) {
   const n = (M.snips || []).length;
-  M.snips = (M.snips || []).filter(s => !(s.sheet === sheet && s.cell === a));
+  M.snips = (M.snips || []).filter(s => !(s.sheet === sheet && s.cell === a && s.type !== "auto"));
   delete cell(sheet, a).fill;
   return M.snips.length < n;
 }
