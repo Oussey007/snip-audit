@@ -45,7 +45,7 @@ main#viewer{flex:1 1 auto;overflow:auto;padding:8px;position:relative;outline:no
 .hl .tag{position:absolute;top:-16px;left:-2px;font-size:10px;color:#fff;padding:0 4px;border-radius:3px;white-space:nowrap}
 .hl.texte .tag{background:var(--texte)}.hl.somme .tag{background:var(--somme)}.hl.valide .tag{background:var(--valide)}.hl.exception .tag{background:var(--exception)}
 .empty{color:var(--muted);text-align:center;margin-top:30px;padding:0 12px}
-aside#snipPanel{position:absolute;right:0;top:0;bottom:0;width:min(340px,92%);background:var(--panel);border-left:1px solid var(--line);box-shadow:-2px 0 8px rgba(0,0,0,.15);padding:8px;overflow:auto;z-index:5}
+aside.panel{position:absolute;right:0;top:0;bottom:0;width:min(340px,92%);background:var(--panel);border-left:1px solid var(--line);box-shadow:-2px 0 8px rgba(0,0,0,.15);padding:8px;overflow:auto;z-index:5}
 .snip{border:1px solid var(--line);border-left:4px solid;border-radius:4px;padding:4px 6px;margin:5px 0;cursor:pointer}
 .snip:hover{background:#f8fafc}
 .snip.texte{border-left-color:var(--texte)}.snip.somme{border-left-color:var(--somme)}.snip.valide{border-left-color:var(--valide)}.snip.exception{border-left-color:var(--exception)}
@@ -55,3 +55,10 @@ aside#snipPanel{position:absolute;right:0;top:0;bottom:0;width:min(340px,92%);ba
 .zbar{width:100%;display:flex;gap:4px;flex-wrap:wrap;align-items:center;font-size:11px;color:var(--auto);font-weight:600;margin-bottom:2px}
 .zchip{border:1px solid var(--auto);color:var(--auto);background:#fff;border-radius:12px;padding:1px 8px;cursor:pointer;font:inherit;font-size:11px}
 .zchip.active{background:var(--auto);color:#fff}
+.piece{display:flex;align-items:center;gap:6px;border-bottom:1px solid #eef0f3;padding:4px 2px}
+.piece .n{flex:1;min-width:0;cursor:pointer;word-break:break-all}
+.piece .n:hover{color:var(--blue)}
+.piece .s{color:var(--muted);font-size:11px;white-space:nowrap}
+.btn.danger{color:var(--exception);border-color:#f3b4b4}
+.btn.danger.confirm{background:var(--exception);color:#fff}
+.foot{position:sticky;bottom:-8px;background:var(--panel);padding:6px 0;border-top:1px solid var(--line);margin-top:6px}

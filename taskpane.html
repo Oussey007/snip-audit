@@ -5,22 +5,22 @@
 <meta http-equiv="X-UA-Compatible" content="IE=Edge">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Pièces justificatives – Snips</title>
-<link rel="stylesheet" href="taskpane.css?v=3">
+<link rel="stylesheet" href="taskpane.css?v=4">
 <!-- Office.js : bibliothèque Microsoft obligatoire pour tout add-in (chargée par Excel) -->
 <script src="https://appsforoffice.microsoft.com/lib/1/hosted/office.js"></script>
 </head>
 <body>
 <header id="top">
   <div class="row">
-    <label class="btn primary" title="Sélectionner le dossier « pièces triées » (ou le dossier de la mission)">
+    <label class="btn primary" title="Ajouter au classeur toutes les pièces d'un dossier (ex. « pièces triées »)">
       📁 Pièces
       <input id="pickDir" type="file" webkitdirectory directory multiple hidden>
     </label>
-    <label class="btn" title="Sélectionner des fichiers PDF (si le choix de dossier n'est pas disponible)">
+    <label class="btn" title="Ajouter au classeur un ou plusieurs PDF">
       + PDF
       <input id="pickFiles" type="file" accept="application/pdf" multiple hidden>
     </label>
-    <span id="docCount" class="muted">0 pièce</span>
+    <button id="docCount" class="btn small" title="Pièces enregistrées dans ce classeur : voir, supprimer">0 pièce ▾</button>
     <span class="spacer"></span>
     <button id="btnSnips" class="btn" title="Liste des snips du classeur">☰ Snips</button>
   </div>
@@ -49,10 +49,16 @@
   <div id="msg" class="msg" role="status" aria-live="polite"></div>
 </header>
 <main id="viewer" tabindex="0"></main>
-<aside id="snipPanel" hidden>
+<aside id="piecePanel" class="panel" hidden>
+  <div class="row"><strong>Pièces de ce classeur</strong><span class="spacer"></span><button id="closePieces" class="btn small">✕</button></div>
+  <p class="muted">Les pièces sont enregistrées dans le fichier Excel (comme les snips). Pensez à enregistrer le classeur (Ctrl+S) après un ajout ou une suppression.</p>
+  <div id="pieceList"></div>
+  <div class="row foot"><span id="pieceTotal" class="muted"></span><span class="spacer"></span><button id="btnClearPieces" class="btn small danger">🗑 Tout supprimer</button></div>
+</aside>
+<aside id="snipPanel" class="panel" hidden>
   <div class="row"><strong>Snips du classeur</strong><span class="spacer"></span><button id="closeSnips" class="btn small">✕</button></div>
   <div id="snipList"></div>
 </aside>
-<script type="module" src="js/app.js?v=3"></script>
+<script type="module" src="js/app.js?v=4"></script>
 </body>
 </html>
