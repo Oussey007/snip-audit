@@ -1,10 +1,11 @@
 // Volet « Pièces justificatives » : visionneuse liée aux cellules + snips façon DataSnipper.
-import { Viewer } from "./viewer.js?v=3";
-import * as store from "./store.js?v=3";
-import { textInRect, numbersIn, valueFromText, round2, searchVariants } from "./extract.js?v=3";
+import { Viewer } from "./viewer.js?v=4";
+import * as store from "./store.js?v=4";
+import { textInRect, numbersIn, valueFromText, round2, searchVariants } from "./extract.js?v=4";
 
 const $ = s => document.querySelector(s);
-const XL = window.__MOCK__ ? await import("./excel-mock.js?v=3") : await import("./excel-bridge.js?v=3");
+const XL = window.__MOCK__ ? await import("./excel-mock.js?v=4") : await import("./excel-bridge.js?v=4");
+store.init(XL);
 
 const S = { files: [], liens: new Map(), snips: [], idx: new Map(), zones: [], sel: null, ref: null, tool: null, tabs: [], busy: false };
 const LABEL = { texte: "T", somme: "Σ", valide: "✓", exception: "✗", auto: "◆" };
@@ -29,29 +30,73 @@ const viewer = new Viewer($("#viewer"), {
   onZoom: s => { $("#zoomInfo").textContent = Math.round(s * 100) + " %"; }
 });
 
-// ---------- Pièces (stockées localement)
+// ---------- Pièces (enregistrées dans le classeur)
+const ko = n => n >= 1e6 ? (n / 1e6).toLocaleString("fr-FR", { maximumFractionDigits: 1 }) + " Mo" : Math.max(1, Math.round(n / 1e3)) + " Ko";
 async function refreshFiles() {
   S.files = (await store.listFiles()).sort((a, b) => a.path.localeCompare(b.path, "fr"));
-  $("#docCount").textContent = `${S.files.length} pièce${S.files.length > 1 ? "s" : ""}`;
+  $("#docCount").textContent = `${S.files.length} pièce${S.files.length > 1 ? "s" : ""} ▾`;
   const sel = $("#docSelect"); const cur = viewer.name;
   sel.innerHTML = `<option value="">— choisir une pièce —</option>` + S.files.map(f => `<option value="${esc(f.name)}" ${f.name === cur ? "selected" : ""}>${esc(f.path)}</option>`).join("");
+  if (!$("#piecePanel").hidden) renderPieceList();
 }
 async function addFiles(list) {
   const pdfs = [...list].filter(f => /\.pdf$/i.test(f.name));
   if (!pdfs.length) return msg("Aucun PDF trouvé dans la sélection.", "err");
-  msg(`Chargement de ${pdfs.length} pièce(s)…`);
-  await store.putFiles(pdfs);
-  await refreshFiles();
-  msg(`${pdfs.length} pièce(s) chargée(s). Elles restent sur ce poste.`, "ok");
-  onSelection();
+  S.busy = true;
+  try {
+    const r = await store.putFiles(pdfs, (i, n, name) => msg(`Enregistrement dans le classeur : ${i} / ${n} – ${name}`));
+    await refreshFiles();
+    S.busy = false; await onSelection().catch(() => {});
+    msg(`${r.added} pièce(s) ajoutée(s)${r.replaced ? `, ${r.replaced} remplacée(s) (même nom)` : ""} dans ce classeur. Enregistrez le fichier (Ctrl+S) pour les conserver.`, "ok");
+  } catch (e) { msg("Ajout interrompu : " + e.message, "err"); await refreshFiles(); }
+  finally { S.busy = false; }
 }
-$("#pickDir").addEventListener("change", e => addFiles(e.target.files));
-$("#pickFiles").addEventListener("change", e => addFiles(e.target.files));
+$("#pickDir").addEventListener("change", e => { addFiles(e.target.files); e.target.value = ""; });
+$("#pickFiles").addEventListener("change", e => { addFiles(e.target.files); e.target.value = ""; });
 $("#docSelect").addEventListener("change", e => { if (e.target.value) openDoc(e.target.value, 1); });
+
+// Liste des pièces : ouvrir, supprimer une pièce, tout supprimer (confirmation par un 2e clic)
+function usage(name) {
+  let n = 0; for (const l of S.liens.values()) n += l.filter(x => x.file === name).length;
+  return n + S.snips.filter(s => s.file === name).length;
+}
+function armConfirm(btn, label, action) {
+  if (btn.classList.contains("confirm")) { action(); return; }
+  document.querySelectorAll(".confirm").forEach(b => { b.classList.remove("confirm"); b.textContent = b.dataset.label; });
+  btn.dataset.label = btn.textContent; btn.classList.add("confirm"); btn.textContent = label;
+  setTimeout(() => { if (btn.classList.contains("confirm")) { btn.classList.remove("confirm"); btn.textContent = btn.dataset.label; } }, 4000);
+}
+function renderPieceList() {
+  const el = $("#pieceList");
+  const tot = S.files.reduce((a, f) => a + (f.size || 0), 0);
+  $("#pieceTotal").textContent = S.files.length ? `${S.files.length} pièce(s) · ${ko(tot)}` : "";
+  $("#btnClearPieces").disabled = !S.files.length;
+  if (!S.files.length) { el.innerHTML = `<p class="muted">Aucune pièce dans ce classeur. Ajoutez-les avec 📁 Pièces (un dossier) ou + PDF.</p>`; return; }
+  el.innerHTML = S.files.map((f, i) => { const u = usage(f.name);
+    return `<div class="piece"><span class="n" data-i="${i}" title="${esc(f.path)}">${esc(f.path)}</span><span class="s">${ko(f.size)}${u ? " · " + u + " renvoi(s)" : ""}</span><button class="btn small danger del" data-i="${i}" title="Supprimer cette pièce du classeur">🗑</button></div>`; }).join("");
+  el.querySelectorAll(".n").forEach(d => d.onclick = () => openDoc(S.files[+d.dataset.i].name, 1));
+  el.querySelectorAll(".del").forEach(b => b.onclick = () => armConfirm(b, "Confirmer", async () => {
+    const f = S.files[+b.dataset.i]; const u = usage(f.name);
+    await store.deleteFile(f.name); if (viewer.name === f.name) viewer.empty("Pièce supprimée du classeur.");
+    await refreshFiles(); renderPieceList();
+    msg(`« ${f.name} » supprimée du classeur${u ? ` (${u} lien(s) ou zone(s) du classeur y renvoient : ils ne s'afficheront plus)` : ""}. Enregistrez le fichier (Ctrl+S).`, "ok");
+  }));
+}
+$("#docCount").addEventListener("click", async () => { await refreshFiles(); renderPieceList(); $("#snipPanel").hidden = true; $("#piecePanel").hidden = false; });
+$("#closePieces").addEventListener("click", () => { $("#piecePanel").hidden = true; });
+$("#btnClearPieces").addEventListener("click", e => armConfirm(e.currentTarget, `Confirmer : supprimer les ${S.files.length} pièces`, async () => {
+  const n = await store.clearFiles(); viewer.empty("Aucune pièce dans ce classeur.");
+  await refreshFiles(); renderPieceList();
+  msg(`${n} pièce(s) supprimée(s) du classeur. Les fichiers sur votre disque ne sont pas touchés. Enregistrez le fichier (Ctrl+S).`, "ok");
+}));
 
 async function openDoc(name, page = 1, rect = null) {
   const blob = await store.getFile(name);
-  if (!blob) { msg(`Pièce « ${name} » non chargée : cliquez sur 📁 Pièces et sélectionnez le dossier « pièces triées ».`, "err"); return false; }
+  if (!blob) {
+    if (!S.files.length) { msg("Aucune pièce dans ce classeur : cliquez sur 📁 Pièces pour ajouter celles du dossier (ex. « pièces triées »)."); viewer.empty("Aucune pièce dans ce classeur. Cliquez sur 📁 Pièces pour ajouter les pièces de ce dossier."); }
+    else msg(`Pièce « ${name} » absente de ce classeur : ajoutez-la avec 📁 Pièces ou + PDF.`, "err");
+    return false;
+  }
   await viewer.open(name, blob);
   $("#docSelect").value = name;
   paintHighlights(rect ? { page, rect } : null);
@@ -161,13 +206,13 @@ async function createSnip(page, rect) {
   if (S.busy) return; S.busy = true;
   try {
     const sel = await XL.getSelection();
-    if (sel.sheet === XL.SNIP_SHEET) throw new Error("sélectionnez une cellule de la table, pas la feuille _Snips");
+    if (sel.sheet === XL.SNIP_SHEET || sel.sheet === XL.PIECE_SHEET) throw new Error("sélectionnez une cellule de la table");
     const type = S.tool;
     let text = textInRect(await viewer.textItems(page), rect);
     let ocr = false;
     if (!text && (type === "texte" || type === "somme")) {
       msg("Zone scannée : lecture OCR en cours…");
-      const { ocrCanvas } = await import("./ocr.js?v=3");
+      const { ocrCanvas } = await import("./ocr.js?v=4");
       text = await ocrCanvas(await viewer.regionCanvas(page, rect)); ocr = true;
     }
     let value;
@@ -204,7 +249,7 @@ function renderSnipList() {
   el.innerHTML = head + L.map((s, i) => `<div class="snip ${s.type}" data-i="${i}"><b>${LABEL[s.type]} ${esc(s.sheet)}!${esc(s.cell)}</b> ${s.type === "texte" || s.type === "somme" ? "= " + esc(fmt(s.value)) : ""}<div class="f">${esc(s.file)} · p.${s.page} · ${esc(s.date)}</div></div>`).join("");
   el.querySelectorAll(".snip").forEach(d => d.onclick = async () => { const s = L[+d.dataset.i]; await XL.selectCell(s.sheet, s.cell); await openDoc(s.file, s.page, s.rect); });
 }
-$("#btnSnips").addEventListener("click", async () => { await loadSnips(); renderSnipList(); $("#snipPanel").hidden = false; });
+$("#btnSnips").addEventListener("click", async () => { await loadSnips(); renderSnipList(); $("#piecePanel").hidden = true; $("#snipPanel").hidden = false; });
 $("#closeSnips").addEventListener("click", () => { $("#snipPanel").hidden = true; });
 
 // ---------- Navigation
@@ -223,7 +268,8 @@ $("#zoomFit").onclick = () => viewer.fitWidth();
     try { S.liens = await XL.readLiens(); } catch (e) { S.liens = new Map(); }
     try { await loadSnips(); } catch (e) { S.snips = []; }
     XL.onSelection(() => onSelection().catch(e => msg(e.message, "err")));
-    msg(S.files.length ? `${S.liens.size} écritures liées · ${manual().length} snip(s) · ${S.snips.length - manual().length} zones automatiques.` : "Cliquez sur 📁 Pièces et sélectionnez le dossier « pièces triées ».");
+    msg(S.files.length ? `${S.files.length} pièce(s) dans ce classeur · ${S.liens.size} écritures liées · ${manual().length} snip(s) · ${S.snips.length - manual().length} zones automatiques.` : "Aucune pièce dans ce classeur : cliquez sur 📁 Pièces pour ajouter celles du dossier (ex. « pièces triées »).");
+    if (!S.files.length) viewer.empty("Aucune pièce dans ce classeur. Cliquez sur 📁 Pièces pour ajouter les pièces de ce dossier.");
     await onSelection();
     window.__app_ready = true;
   } catch (e) { msg("Erreur au démarrage : " + e.message, "err"); window.__app_error = e.message; }

@@ -128,3 +128,76 @@ export async function deleteSnip(sheet, cell) {
 export async function selectCell(sheet, cell) {
   return Excel.run(async ctx => { const ws = ctx.workbook.worksheets.getItem(sheet); ws.activate(); ws.getRange(cell).select(); await ctx.sync(); });
 }
+
+// ---------- Pièces enregistrées DANS le classeur (feuille « _Pieces », masquée de façon permanente)
+// Une ligne par pièce : A nom | B chemin | C taille (octets) | D nb de morceaux | E ajoutée le | F… contenu PDF en base64 (morceaux de 32 000 caractères)
+export const PIECE_SHEET = "_Pieces";
+const PH = ["Nom", "Chemin", "Taille", "Morceaux", "Ajoutée le"], META = PH.length, CH = 32000, SLICE = 60;
+async function pieceSheet(ctx, create) {
+  let ws = ctx.workbook.worksheets.getItemOrNullObject(PIECE_SHEET);
+  await ctx.sync();
+  if (ws.isNullObject) {
+    if (!create) return null;
+    ws = ctx.workbook.worksheets.add(PIECE_SHEET);
+    ws.getRangeByIndexes(0, 0, 1, META).values = [PH];
+    ws.visibility = Excel.SheetVisibility.veryHidden;
+    await ctx.sync();
+  }
+  return ws;
+}
+async function pieceRows(ctx, ws) {
+  const u = ws.getUsedRangeOrNullObject(true); u.load("rowCount"); await ctx.sync();
+  if (u.isNullObject || u.rowCount < 2) return [];
+  const r = ws.getRangeByIndexes(1, 0, u.rowCount - 1, META); r.load("values"); await ctx.sync();
+  return r.values.map((v, i) => ({ row: i + 1, name: String(v[0] || ""), path: String(v[1] || ""), size: +v[2] || 0, chunks: +v[3] || 0, added: String(v[4] || "") })).filter(x => x.name);
+}
+export async function listPieces() {
+  return Excel.run(async ctx => { const ws = await pieceSheet(ctx, false); return ws ? pieceRows(ctx, ws) : []; });
+}
+export async function addPiece(name, path, size, b64) {
+  const parts = []; for (let i = 0; i < b64.length; i += CH) parts.push("~" + b64.slice(i, i + CH));
+  return Excel.run(async ctx => {
+    const ws = await pieceSheet(ctx, true);
+    const rows = await pieceRows(ctx, ws);
+    const ex = rows.find(x => x.name === name);
+    let row;
+    if (ex) { row = ex.row; ws.getRange(`${row + 1}:${row + 1}`).clear(); }
+    else { const u = ws.getUsedRange(true); u.load("rowCount"); await ctx.sync(); row = u.rowCount; }
+    ws.getRangeByIndexes(row, 0, 1, META).values = [[name, path, size, parts.length, new Date().toLocaleString("fr-FR")]];
+    await ctx.sync();
+    for (let i = 0; i < parts.length; i += SLICE) {
+      const sl = parts.slice(i, i + SLICE);
+      ws.getRangeByIndexes(row, META + i, 1, sl.length).values = [sl];
+      await ctx.sync();
+    }
+    return { replaced: !!ex };
+  });
+}
+export async function getPiece(name) {
+  return Excel.run(async ctx => {
+    const ws = await pieceSheet(ctx, false); if (!ws) return null;
+    const p = (await pieceRows(ctx, ws)).find(x => x.name === name); if (!p) return null;
+    let out = "";
+    for (let i = 0; i < p.chunks; i += SLICE) {
+      const r = ws.getRangeByIndexes(p.row, META + i, 1, Math.min(SLICE, p.chunks - i)); r.load("values"); await ctx.sync();
+      out += r.values[0].map(s => String(s).replace(/^~/, "")).join("");
+    }
+    return out;
+  });
+}
+export async function deletePiece(name) {
+  return Excel.run(async ctx => {
+    const ws = await pieceSheet(ctx, false); if (!ws) return false;
+    const p = (await pieceRows(ctx, ws)).find(x => x.name === name); if (!p) return false;
+    ws.getRange(`${p.row + 1}:${p.row + 1}`).delete(Excel.DeleteShiftDirection.up);
+    await ctx.sync(); return true;
+  });
+}
+export async function clearPieces() {
+  return Excel.run(async ctx => {
+    const ws = await pieceSheet(ctx, false); if (!ws) return 0;
+    const n = (await pieceRows(ctx, ws)).length;
+    ws.visibility = Excel.SheetVisibility.hidden; await ctx.sync();
+    ws.delete(); await ctx.sync(); return n;
+  });
+}

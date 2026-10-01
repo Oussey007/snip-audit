@@ -1,54 +1,34 @@
-// Stockage local des pièces (IndexedDB du volet) : les PDF ne quittent jamais le poste.
-const DB = "snip-audit-pieces", ST = "files";
-let dbp = null;
-function db() {
-  if (!dbp) dbp = new Promise((res, rej) => {
-    const r = indexedDB.open(DB, 1);
-    r.onupgradeneeded = () => r.result.createObjectStore(ST, { keyPath: "name" });
-    r.onsuccess = () => res(r.result);
-    r.onerror = () => rej(r.error);
-  });
-  return dbp;
+// Pièces justificatives : enregistrées DANS le classeur Excel (feuille masquée « _Pieces »), comme DataSnipper.
+// Chaque classeur a donc ses propres pièces ; rien n'est conservé dans le volet d'un classeur à l'autre.
+let XL = null;
+const cache = new Map();          // nom -> Blob (session en cours uniquement)
+export function init(xl) {
+  XL = xl;
+  try { indexedDB.deleteDatabase("snip-audit-pieces"); } catch (e) {}   // ancienne version : copies locales supprimées
 }
-async function tx(mode, fn) {
-  const d = await db();
-  return new Promise((res, rej) => {
-    const t = d.transaction(ST, mode); const s = t.objectStore(ST);
-    const out = fn(s);
-    t.oncomplete = () => res(out && out.result !== undefined ? out.result : out);
-    t.onerror = () => rej(t.error);
-  });
+function toB64(file) {
+  return new Promise((res, rej) => { const r = new FileReader(); r.onload = () => res(String(r.result).split(",")[1] || ""); r.onerror = () => rej(r.error); r.readAsDataURL(file); });
 }
-// Mémoire vive en secours si IndexedDB est indisponible (navigation privée, etc.)
-const mem = new Map();
-let idbOk = true;
-
-export async function putFiles(files) {
-  const recs = files.map(f => ({ name: f.name, path: f.webkitRelativePath || f.name, size: f.size, blob: f, added: Date.now() }));
-  recs.forEach(r => mem.set(r.name, r));
-  if (idbOk) {
-    try { await tx("readwrite", s => { recs.forEach(r => s.put(r)); }); }
-    catch (e) { idbOk = false; console.warn("IndexedDB indisponible, stockage en mémoire", e); }
+async function fromB64(b64) {
+  try { return await (await fetch("data:application/pdf;base64," + b64)).blob(); }
+  catch (e) { const bin = atob(b64); const u = new Uint8Array(bin.length); for (let i = 0; i < bin.length; i++) u[i] = bin.charCodeAt(i); return new Blob([u], { type: "application/pdf" }); }
+}
+export async function putFiles(files, onProgress) {
+  let added = 0, replaced = 0;
+  for (let i = 0; i < files.length; i++) {
+    const f = files[i];
+    onProgress && onProgress(i + 1, files.length, f.name);
+    const r = await XL.addPiece(f.name, f.webkitRelativePath || f.name, f.size, await toB64(f));
+    cache.set(f.name, f);
+    r.replaced ? replaced++ : added++;
   }
-  return recs.length;
+  return { added, replaced };
 }
-export async function listFiles() {
-  if (idbOk) {
-    try {
-      const all = await tx("readonly", s => s.getAll());
-      all.forEach(r => { if (!mem.has(r.name)) mem.set(r.name, r); });
-    } catch (e) { idbOk = false; }
-  }
-  return [...mem.values()].map(r => ({ name: r.name, path: r.path, size: r.size }));
-}
+export async function listFiles() { return (await XL.listPieces()).map(p => ({ name: p.name, path: p.path || p.name, size: p.size, added: p.added })); }
 export async function getFile(name) {
-  if (mem.has(name) && mem.get(name).blob) return mem.get(name).blob;
-  if (idbOk) {
-    try { const r = await tx("readonly", s => s.get(name)); if (r) { mem.set(name, r); return r.blob; } } catch (e) {}
-  }
-  return null;
+  if (cache.has(name)) return cache.get(name);
+  const b64 = await XL.getPiece(name); if (!b64) return null;
+  const blob = await fromB64(b64); cache.set(name, blob); return blob;
 }
-export async function clearFiles() {
-  mem.clear();
-  if (idbOk) { try { await tx("readwrite", s => s.clear()); } catch (e) {} }
-}
+export async function deleteFile(name) { cache.delete(name); return XL.deletePiece(name); }
+export async function clearFiles() { cache.clear(); return XL.clearPieces(); }

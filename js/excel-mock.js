@@ -44,3 +44,16 @@ export async function deleteSnip(sheet, a) {
   return M.snips.length < n;
 }
 export async function selectCell(sheet, a) { window.__mock_select(sheet, a); }
+
+// ---------- Pièces dans le classeur (simulation)
+export const PIECE_SHEET = "_Pieces";
+M.pieces = M.pieces || [];
+export async function listPieces() { return M.pieces.map((p, i) => ({ row: i + 1, name: p.name, path: p.path, size: p.size, chunks: 1, added: p.added })); }
+export async function addPiece(name, path, size, b64) {
+  const ex = M.pieces.find(p => p.name === name);
+  if (ex) Object.assign(ex, { path, size, b64 }); else M.pieces.push({ name, path, size, b64, added: new Date().toLocaleString("fr-FR") });
+  return { replaced: !!ex };
+}
+export async function getPiece(name) { const p = M.pieces.find(x => x.name === name); return p ? p.b64 : null; }
+export async function deletePiece(name) { const n = M.pieces.length; M.pieces = M.pieces.filter(p => p.name !== name); return M.pieces.length < n; }
+export async function clearPieces() { const n = M.pieces.length; M.pieces = []; return n; }
