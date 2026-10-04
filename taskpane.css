@@ -62,3 +62,7 @@ aside.panel{position:absolute;right:0;top:0;bottom:0;width:min(340px,92%);backgr
 .btn.danger{color:var(--exception);border-color:#f3b4b4}
 .btn.danger.confirm{background:var(--exception);color:#fff}
 .foot{position:sticky;bottom:-8px;background:var(--panel);padding:6px 0;border-top:1px solid var(--line);margin-top:6px}
+.fsh{font-weight:700;color:var(--navy);margin:10px 0 4px;border-bottom:1px solid var(--line);padding-bottom:2px}
+#fsPanel .row{margin:3px 0}#fsPanel select{min-width:0}
+#fsResult .snip div{font-size:11px}
+#fsStatus{height:auto;min-height:14px;margin-top:6px}

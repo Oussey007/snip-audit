@@ -5,7 +5,7 @@
 <meta http-equiv="X-UA-Compatible" content="IE=Edge">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Pièces justificatives – Snips</title>
-<link rel="stylesheet" href="taskpane.css?v=4">
+<link rel="stylesheet" href="taskpane.css?v=7">
 <!-- Office.js : bibliothèque Microsoft obligatoire pour tout add-in (chargée par Excel) -->
 <script src="https://appsforoffice.microsoft.com/lib/1/hosted/office.js"></script>
 </head>
@@ -22,6 +22,7 @@
     </label>
     <button id="docCount" class="btn small" title="Pièces enregistrées dans ce classeur : voir, supprimer">0 pièce ▾</button>
     <span class="spacer"></span>
+    <button id="btnFS" class="btn" title="Pointer la plaquette (bilan, compte de résultat) avec la balance issue du FEC">📊 Plaquette</button>
     <button id="btnSnips" class="btn" title="Liste des snips du classeur">☰ Snips</button>
   </div>
   <div class="row tools" role="toolbar" aria-label="Outils de snip">
@@ -59,6 +60,30 @@
   <div class="row"><strong>Snips du classeur</strong><span class="spacer"></span><button id="closeSnips" class="btn small">✕</button></div>
   <div id="snipList"></div>
 </aside>
-<script type="module" src="js/app.js?v=4"></script>
+<aside id="fsPanel" class="panel" hidden>
+  <div class="row"><strong>Pointage de la plaquette</strong><span class="spacer"></span><button id="closeFS" class="btn small">✕</button></div>
+  <p class="muted">Rapproche le bilan et le compte de résultat de la plaquette avec la balance reconstituée depuis le FEC. Rapproche aussi l'annexe avec les comptes annuels et la balance. Les résultats sont écrits dans les feuilles « Pointage plaquette », « Pointage annexe », « Contrôles plaquette », « Balance FEC » et « Mapping PCG ».</p>
+  <div class="fsh">1. Balance</div>
+  <div class="row"><label class="btn primary" title="Fichier des écritures comptables (.txt)">📄 FEC<input id="fsFec" type="file" accept=".txt,.csv,.tsv,text/plain" hidden></label><span class="muted">.txt, tabulation ou « | »</span></div>
+  <div id="fecInfo" class="cellinfo">Aucun FEC chargé. Sans FEC, l'outil réutilise la feuille « Balance FEC » du classeur si elle existe.</div>
+  <div class="fsh">2. Plaquette</div>
+  <div class="row"><select id="fsPdf"></select><label class="btn" title="Ajouter la plaquette (PDF) aux pièces du classeur">+ PDF<input id="fsAddPdf" type="file" accept="application/pdf" hidden></label></div>
+  <div class="fsh">3. Pointage</div>
+  <div class="row"><button id="fsRun" class="btn primary">▶ Lancer le pointage</button><span class="spacer"></span><button id="fsResetMap" class="btn small" title="Réécrire la feuille Mapping PCG avec le plan par défaut (vos modifications seront perdues)">↺ Mapping par défaut</button></div>
+  <div class="fsh">4. Analyse du texte de l'annexe (Claude)</div>
+  <p class="muted">Conformité de l'annexe (liste de contrôle selon la taille de l'entité) et incohérences entre le texte et les comptes. Claude remplit les feuilles « Conformité annexe » et « Incohérences annexe » ; l'outil vérifie ensuite que chaque citation existe dans le PDF.</p>
+  <div class="row"><button id="aiPrep" class="btn primary" title="Écrit le texte de l'annexe, la liste de contrôle et prépare la consigne">🧠 Préparer l'analyse</button><button id="aiVerif" class="btn" title="Contrôle les citations de Claude dans la plaquette et les encadre">✔ Vérifier les citations</button></div>
+  <div id="aiBox" hidden>
+    <div class="row"><button id="aiCopyExcel" class="btn small" title="Consigne à coller dans le volet Claude for Excel">📋 Consigne Claude for Excel</button><button id="aiCopyChat" class="btn small" title="Dossier complet à coller dans une conversation Claude (sans Claude for Excel)">📋 Dossier pour une conversation</button></div>
+    <textarea id="aiOut" rows="4" readonly style="width:100%;font-size:11px"></textarea>
+    <div class="muted">Sans Claude for Excel : collez ici la réponse JSON de la conversation, puis importez.</div>
+    <textarea id="aiIn" rows="3" style="width:100%;font-size:11px" placeholder="Réponse de Claude (bloc JSON)"></textarea>
+    <div class="row"><button id="aiImport" class="btn small">⬇ Importer la réponse</button></div>
+  </div>
+  <div id="fsStatus" class="msg"></div>
+  <div id="aiResult"></div>
+  <div id="fsResult"></div>
+</aside>
+<script type="module" src="js/app.js?v=7"></script>
 </body>
 </html>

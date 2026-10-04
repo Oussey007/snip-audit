@@ -201,3 +201,87 @@ export async function clearPieces() {
     ws.delete(); await ctx.sync(); return n;
   });
 }
+
+// ---------- Pointage de la plaquette : écriture de tableaux et zones automatiques
+const colLetter = i => { let s = ""; i++; while (i) { const m = (i - 1) % 26; s = String.fromCharCode(65 + m) + s; i = Math.floor((i - 1) / 26); } return s; };
+export { colLetter };
+
+// Lit les valeurs d'une feuille (null si absente)
+export async function readSheet(name) {
+  return Excel.run(async ctx => sheetValues(ctx, name));
+}
+
+// Écrit un tableau dans une feuille (créée ou vidée) : opts = { title, subtitle, header, rows, widths, numCols, formulas:{col: fn(rowIndex)}, fills:[{row, color}], startRow }
+export async function writeTable(name, opts) {
+  return Excel.run(async ctx => {
+    let ws = ctx.workbook.worksheets.getItemOrNullObject(name);
+    await ctx.sync();
+    if (ws.isNullObject) ws = ctx.workbook.worksheets.add(name);
+    else { ws.getRange().clear(); }
+    let r0 = 0;
+    if (opts.title) { const t = ws.getRange("A1"); t.values = [[opts.title]]; t.format.font.bold = true; t.format.font.size = 13; t.format.font.color = "#1F3864"; r0 = 1; }
+    if (opts.subtitle && opts.subtitle.length) { ws.getRangeByIndexes(r0, 0, opts.subtitle.length, 1).values = opts.subtitle.map(s => [s]); ws.getRangeByIndexes(r0, 0, opts.subtitle.length, 1).format.font.color = "#4B5563"; r0 += opts.subtitle.length; }
+    if (r0) r0++;
+    const nc = opts.header.length;
+    const h = ws.getRangeByIndexes(r0, 0, 1, nc); h.values = [opts.header];
+    h.format.font.bold = true; h.format.font.color = "#FFFFFF"; h.format.fill.color = "#1F3864"; h.format.wrapText = true;
+    const rows = opts.rows;
+    if (rows.length) {
+      const body = ws.getRangeByIndexes(r0 + 1, 0, rows.length, nc);
+      const vals = rows.map((r, i) => r.map((v, j) => (opts.formulas && opts.formulas[j]) ? opts.formulas[j](r0 + 2 + i, r) : (v === null || v === undefined ? "" : v)));
+      body.values = vals;
+      for (const j of opts.numCols || []) ws.getRangeByIndexes(r0 + 1, j, rows.length, 1).numberFormat = rows.map(() => ["#,##0.00;-#,##0.00;0.00"]);
+      body.format.verticalAlignment = "Top";
+    }
+    (opts.widths || []).forEach((w, j) => { ws.getRangeByIndexes(0, j, 1, 1).format.columnWidth = w; });
+    for (const f of opts.fills || []) ws.getRangeByIndexes(r0 + 1 + f.row, f.col ?? 0, 1, f.ncol ?? nc).format.fill.color = f.color;
+    for (const j of opts.wrapCols || []) if (rows.length) ws.getRangeByIndexes(r0 + 1, j, rows.length, 1).format.wrapText = true;
+    ws.freezePanes.freezeRows(r0 + 1);
+    await ctx.sync();
+    return { headerRow: r0 + 1, firstRow: r0 + 2 };
+  });
+}
+
+// Remplace les zones automatiques d'une feuille : zones = [{cell, file, page, rect, value, text}]
+export async function replaceAutoZones(sheetName, zones) {
+  return Excel.run(async ctx => {
+    const ws = await ensureSnipSheet(ctx);
+    const u = ws.getUsedRange(); u.load("values,rowCount"); await ctx.sync();
+    const keep = u.values.filter((r, i) => i === 0 || !(r[3] === "auto" && r[1] === sheetName));
+    const date = new Date().toLocaleString("fr-FR");
+    const add = zones.map((z, i) => [`fs-${sheetName}-${i}-${Date.now()}`, sheetName, z.cell, "auto", z.file, z.page, ...z.rect.map(x => Math.round(x * 100) / 100), z.value ?? "", String(z.text || "").slice(0, 2000), date, ""]);
+    const all = keep.concat(add);
+    ws.getRange().clear();
+    ws.getRangeByIndexes(0, 0, all.length, SNIP_HEAD.length).values = all.map(r => r.slice(0, SNIP_HEAD.length).concat(Array(Math.max(0, SNIP_HEAD.length - r.length)).fill("")));
+    ws.getRangeByIndexes(0, 0, 1, SNIP_HEAD.length).format.font.bold = true;
+    await ctx.sync();
+    return add.length;
+  });
+}
+
+export async function activateSheet(name, cell) {
+  return Excel.run(async ctx => { const ws = ctx.workbook.worksheets.getItem(name); ws.activate(); if (cell) ws.getRange(cell).select(); await ctx.sync(); });
+}
+
+// Écrit un bloc de valeurs à partir d'une cellule (ligne 1-based, colonne 0-based) et colore des cellules
+export async function writeCells(name, row, col, values, fills = []) {
+  return Excel.run(async ctx => {
+    const ws = ctx.workbook.worksheets.getItem(name);
+    if (values.length) ws.getRangeByIndexes(row - 1, col, values.length, values[0].length).values = values;
+    for (const f of fills) ws.getRange(f.cell).format.fill.color = f.color;
+    await ctx.sync();
+  });
+}
+
+// Feuille de données brutes (historique des versions), masquée
+export async function writeRaw(name, values, hidden = true) {
+  return Excel.run(async ctx => {
+    let ws = ctx.workbook.worksheets.getItemOrNullObject(name); await ctx.sync();
+    if (ws.isNullObject) { ws = ctx.workbook.worksheets.add(name); await ctx.sync(); }
+    ws.getRange().clear();
+    const CH = 2000;
+    for (let i = 0; i < values.length; i += CH) { const part = values.slice(i, i + CH); ws.getRangeByIndexes(i, 0, part.length, part[0].length).values = part; await ctx.sync(); }
+    if (hidden) ws.visibility = Excel.SheetVisibility.veryHidden;
+    await ctx.sync();
+  });
+}

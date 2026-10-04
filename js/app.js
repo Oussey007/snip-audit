@@ -1,10 +1,11 @@
 // Volet « Pièces justificatives » : visionneuse liée aux cellules + snips façon DataSnipper.
-import { Viewer } from "./viewer.js?v=4";
-import * as store from "./store.js?v=4";
-import { textInRect, numbersIn, valueFromText, round2, searchVariants } from "./extract.js?v=4";
+import { Viewer } from "./viewer.js?v=7";
+import * as store from "./store.js?v=7";
+import { textInRect, numbersIn, valueFromText, round2, searchVariants } from "./extract.js?v=7";
+import { initFS } from "./fs-ui.js?v=7";
 
 const $ = s => document.querySelector(s);
-const XL = window.__MOCK__ ? await import("./excel-mock.js?v=4") : await import("./excel-bridge.js?v=4");
+const XL = window.__MOCK__ ? await import("./excel-mock.js?v=7") : await import("./excel-bridge.js?v=7");
 store.init(XL);
 
 const S = { files: [], liens: new Map(), snips: [], idx: new Map(), zones: [], sel: null, ref: null, tool: null, tabs: [], busy: false };
@@ -82,7 +83,7 @@ function renderPieceList() {
     msg(`« ${f.name} » supprimée du classeur${u ? ` (${u} lien(s) ou zone(s) du classeur y renvoient : ils ne s'afficheront plus)` : ""}. Enregistrez le fichier (Ctrl+S).`, "ok");
   }));
 }
-$("#docCount").addEventListener("click", async () => { await refreshFiles(); renderPieceList(); $("#snipPanel").hidden = true; $("#piecePanel").hidden = false; });
+$("#docCount").addEventListener("click", async () => { await refreshFiles(); renderPieceList(); document.querySelectorAll("aside.panel").forEach(p => p.hidden = true); $("#piecePanel").hidden = false; });
 $("#closePieces").addEventListener("click", () => { $("#piecePanel").hidden = true; });
 $("#btnClearPieces").addEventListener("click", e => armConfirm(e.currentTarget, `Confirmer : supprimer les ${S.files.length} pièces`, async () => {
   const n = await store.clearFiles(); viewer.empty("Aucune pièce dans ce classeur.");
@@ -212,7 +213,7 @@ async function createSnip(page, rect) {
     let ocr = false;
     if (!text && (type === "texte" || type === "somme")) {
       msg("Zone scannée : lecture OCR en cours…");
-      const { ocrCanvas } = await import("./ocr.js?v=4");
+      const { ocrCanvas } = await import("./ocr.js?v=7");
       text = await ocrCanvas(await viewer.regionCanvas(page, rect)); ocr = true;
     }
     let value;
@@ -249,7 +250,7 @@ function renderSnipList() {
   el.innerHTML = head + L.map((s, i) => `<div class="snip ${s.type}" data-i="${i}"><b>${LABEL[s.type]} ${esc(s.sheet)}!${esc(s.cell)}</b> ${s.type === "texte" || s.type === "somme" ? "= " + esc(fmt(s.value)) : ""}<div class="f">${esc(s.file)} · p.${s.page} · ${esc(s.date)}</div></div>`).join("");
   el.querySelectorAll(".snip").forEach(d => d.onclick = async () => { const s = L[+d.dataset.i]; await XL.selectCell(s.sheet, s.cell); await openDoc(s.file, s.page, s.rect); });
 }
-$("#btnSnips").addEventListener("click", async () => { await loadSnips(); renderSnipList(); $("#piecePanel").hidden = true; $("#snipPanel").hidden = false; });
+$("#btnSnips").addEventListener("click", async () => { await loadSnips(); renderSnipList(); document.querySelectorAll("aside.panel").forEach(p => p.hidden = true); $("#snipPanel").hidden = false; });
 $("#closeSnips").addEventListener("click", () => { $("#snipPanel").hidden = true; });
 
 // ---------- Navigation
@@ -258,6 +259,9 @@ $("#nextPage").onclick = () => viewer.goto(viewer.currentPage() + 1);
 $("#zoomIn").onclick = () => viewer.zoom(1.2);
 $("#zoomOut").onclick = () => viewer.zoom(1 / 1.2);
 $("#zoomFit").onclick = () => viewer.fitWidth();
+
+// ---------- Pointage de la plaquette (FEC / balance <-> bilan et compte de résultat)
+initFS({ XL, store, viewer, openDoc, msg, addFiles, reloadSnips: async () => { await loadSnips(); paintHighlights(null); } });
 
 // ---------- Démarrage
 (async () => {
