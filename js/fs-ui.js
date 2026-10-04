@@ -1,14 +1,14 @@
 // Volet « Pointage plaquette » : FEC -> balance -> rapprochement avec le bilan et le compte de résultat de la plaquette.
 import * as pdfjsLib from "../vendor/pdfjs/pdf.min.mjs";
-import { parseFEC } from "./fs/fec.js?v=7";
-import { DEFAULT_POSTES, comptesDe, SECTION_LABEL } from "./fs/pcg.js?v=7";
-import { extractStatements, matchPostes } from "./fs/plaquette.js?v=7";
-import { tieOut } from "./fs/tieout.js?v=7";
-import { readAnnex } from "./fs/annexe.js?v=7";
-import { checkAnnex } from "./fs/annexcheck.js?v=7";
-import { annexPages } from "./fs/annexe.js?v=7";
-import { snapshot, hashItems, compare, parseVersions, versionRows, VERS_HEAD, keyP, keyA } from "./fs/versions.js?v=7";
-import { SEUILS, CHECKLIST, STATUTS, categorie, annexLines, verifyCitation, instructionExcel, dossierConversation, parseReponse } from "./fs/annexai.js?v=7";
+import { parseFEC } from "./fs/fec.js?v=8";
+import { DEFAULT_POSTES, comptesDe, SECTION_LABEL } from "./fs/pcg.js?v=8";
+import { extractStatements, matchPostes } from "./fs/plaquette.js?v=8";
+import { tieOut } from "./fs/tieout.js?v=8";
+import { readAnnex } from "./fs/annexe.js?v=8";
+import { checkAnnex } from "./fs/annexcheck.js?v=8";
+import { annexPages } from "./fs/annexe.js?v=8";
+import { snapshot, hashItems, compare, parseVersions, versionRows, VERS_HEAD, keyP, keyA } from "./fs/versions.js?v=8";
+import { SEUILS, CHECKLIST, STATUTS, categorie, annexLines, verifyCitation, instructionExcel, dossierConversation, parseReponse } from "./fs/annexai.js?v=8";
 
 export const SHEETS = { versions: "_Versions", modifications: "Modifications plaquette", pointage: "Pointage plaquette", annexe: "Pointage annexe", texte: "Annexe texte", conformite: "Conformité annexe", incoherences: "Incohérences annexe", controles: "Contrôles plaquette", balance: "Balance FEC", mapping: "Mapping PCG" };
 const VENDOR = new URL("../vendor/pdfjs/", import.meta.url).href;
@@ -79,13 +79,14 @@ async function pdfPages(name) {
 // ---------- Versions : reprise des validations de l'auditeur pour les lignes inchangées
 function oldValidations(values, firstHeader, cols) {
   const m = new Map(); const h = values ? values.findIndex(r => String(r[0]).trim() === firstHeader) : -1; if (h < 0) return m;
+  m.signed = values.slice(0, h).some(r => r.some(x => /Convention de signe/.test(String(x))));
   for (const r of values.slice(h + 1)) { const k = String(r[cols.key] ?? "").trim(); if (k) m.set(k, { a: r[cols.a], b: r[cols.b], valid: String(r[cols.valid] ?? "").trim() }); }
   return m;
 }
 const same = (x, y) => (x === "" || x === null || x === undefined ? "" : Math.round(Number(x) * 100) / 100) === (y === "" || y === null || y === undefined ? "" : Math.round(Number(y) * 100) / 100);
 function suivi(old, a, b, prevV, newV, fmtOld) {
   if (!old) return { valid: "", suivi: prevV ? `Nouveau (V${newV})` : "", s: prevV ? "Nouveau" : "" };
-  if (same(old.a, a) && same(old.b, b)) return { valid: old.valid, suivi: `Inchangé${prevV ? " depuis V" + prevV : ""}${old.valid ? " – validation reprise" : ""}`, s: "Inchangé" };
+  if (same(old.a, a) && same(old.b, b)) return { valid: old.valid, suivi: `Inchangé${prevV === "préc." ? " depuis le pointage précédent" : prevV ? " depuis V" + prevV : ""}${old.valid ? " – validation reprise" : ""}`, s: "Inchangé" };
   return { valid: "", suivi: `Modifié (avant : ${fmtOld(old)}) – à revoir${old.valid ? " ; ancienne validation : " + old.valid : ""}`, s: "Modifié" };
 }
 const keysA = rows => { const seen = new Map(); return rows.map(r => { let k = keyA(r); const n = (seen.get(k) || 0) + 1; seen.set(k, n); return n > 1 ? k + "|" + n : k; }); };
@@ -121,13 +122,14 @@ async function run() {
     const identical = prev && prev.hash === hash;
     const version = identical ? prev.version : (prev ? prev.version + 1 : 1);
     const cmp = prev && !identical ? compare(prev.items, snap) : null;
-    const prevV = prev ? (identical ? (hist[hist.length - 2]?.version || null) : prev.version) : null;
+    const prevV = prev ? prev.version : null;
     const oldP = oldValidations(await A.XL.readSheet(SHEETS.pointage), "Section", { a: 3, b: 4, valid: 12, key: 14 });
     const oldA = oldValidations(await A.XL.readSheet(SHEETS.annexe), "Note / tableau", { a: 3, b: 6, valid: 12, key: 14 });
     const f2 = v => v === "" || v === null || v === undefined ? "—" : Number(v).toLocaleString("fr-FR", { maximumFractionDigits: 2 });
-    const supP = t.rows.map(r => suivi(oldP.get(keyP(r)), r.plaquette, r.balance, prevV ?? (oldP.size ? "préc." : null), version, o => `plaquette ${f2(o.a)} · balance ${f2(o.b)}`));
+    const sgn = (v, g) => v === null || v === undefined || v === "" ? v : Math.round(g * v * 100) / 100;
+    const supP = t.rows.map(r => suivi(oldP.get(keyP(r)), oldP.signed ? sgn(r.plaquette, r.sg) : r.plaquette, oldP.signed ? sgn(r.balance, r.sg) : r.balance, prevV ?? (oldP.size ? "préc." : null), version, o => `plaquette ${f2(o.a)} · balance ${f2(o.b)}`));
     const kA = keysA(ca.rows);
-    const supA = ca.rows.map((r, i) => suivi(oldA.get(kA[i]), r.annexe, r.ref, prevV ?? (oldA.size ? "préc." : null), version, o => `annexe ${f2(o.a)} · référence ${f2(o.b)}`));
+    const supA = ca.rows.map((r, i) => suivi(oldA.get(kA[i]), oldA.signed ? sgn(r.annexe, r.sg) : r.annexe, oldA.signed ? sgn(r.ref, r.sg) : r.ref, prevV ?? (oldA.size ? "préc." : null), version, o => `annexe ${f2(o.a)} · référence ${f2(o.b)}`));
     const nRepris = [...supP, ...supA].filter(x => x.s === "Inchangé" && x.valid).length, nRevoir = [...supP, ...supA].filter(x => x.s === "Modifié").length;
     status("Écriture des feuilles de résultat…");
     // Balance
@@ -135,47 +137,64 @@ async function run() {
       const posteOf = new Map();
       for (const p of map.postes.filter(p => !p.total)) for (const reg of [p.regle, p.amort]) if (reg) for (const b of comptesDe(reg.replace(/\bRES\b/g, ""), src.balance)) posteOf.set(b.compte, (posteOf.get(b.compte) ? posteOf.get(b.compte) + " / " : "") + `${SECTION_LABEL[p.section]} – ${p.libelle}`);
       await A.XL.writeTable(SHEETS.balance, {
-        title: "Balance reconstituée depuis le FEC", subtitle: [`Fichier : ${F.fecName} · ${src.info.lignes.toLocaleString("fr-FR")} lignes · résultat ${eur(src.resultat)} € · soldes : débit positif, crédit négatif`],
+        title: "Balance reconstituée depuis le FEC", subtitle: [`Fichier : ${F.fecName} · ${src.info.lignes.toLocaleString("fr-FR")} lignes · résultat ${eur(src.resultat)} €`,
+          "Convention de signe : débit positif, crédit négatif. Contrôles par cumul (colonne F) :",
+          "Cumul des comptes de bilan, classes 1 à 5 (= résultat de l'exercice : positif = bénéfice)",
+          "Cumul des comptes de gestion, classes 6 et 7 (négatif = bénéfice)",
+          "Somme des deux cumuls (doit être nulle)"],
         header: ["Compte", "Libellé", "Solde d'ouverture (à-nouveaux)", "Mouvements débit", "Mouvements crédit", "Solde de clôture", "Poste des comptes annuels"],
         rows: src.balance.map(b => [b.compte, b.lib, b.an, b.debit, b.credit, b.solde, posteOf.get(b.compte) || ""]),
         numCols: [2, 3, 4, 5], widths: [70, 240, 110, 110, 110, 110, 320]
       });
+      const fr = 1 + 5 + 2 + 1, lr = fr + src.balance.length - 1, A_ = `$A$${fr}:$A$${lr}`, F_ = `$F$${fr}:$F$${lr}`;
+      await A.XL.writeCells(SHEETS.balance, 4, 5, [[`=SUMPRODUCT((LEFT(${A_},1)>="1")*(LEFT(${A_},1)<="5")*${F_})`], [`=SUMPRODUCT(((LEFT(${A_},1)="6")+(LEFT(${A_},1)="7"))*${F_})`], ["=F4+F5"]], [], "#,##0.00;-#,##0.00;0.00");
     }
     // Pointage
     const rows = t.rows;
     const res = await A.XL.writeTable(SHEETS.pointage, {
       title: "Pointage de la plaquette avec la balance",
       subtitle: [`Plaquette : ${pdf} (version V${version}) · Balance : ${F.fec ? F.fecName : "feuille " + SHEETS.balance} · ${new Date().toLocaleString("fr-FR")}`,
-        `${t.stats.concordants} montant(s) concordant(s), ${t.stats.ecarts} écart(s), ${t.stats.autres} autre(s). Cliquez sur un montant de la plaquette (colonne D ou K) pour le voir encadré dans le PDF.`],
-      header: ["Section", "Poste", "Colonne", "Plaquette N", "Balance (FEC)", "Écart", "Statut", "Commentaire", "Libellé lu dans la plaquette", "Page PDF", "Plaquette N-1", "Comptes retenus", "Validation auditeur", "Suivi des versions", "Clé"],
-      rows: rows.map((r, i) => [r.sectionLib, r.poste, r.colonne, r.plaquette, r.balance, null, r.statut, r.commentaire, r.libellePlaquette, r.page, r.n1, r.comptes, supP[i].valid, supP[i].suivi, keyP(r)]),
+        `${t.stats.concordants} montant(s) concordant(s), ${t.stats.ecarts} écart(s), ${t.stats.autres} autre(s). Cliquez sur un montant de la plaquette (colonne D ou K) pour le voir encadré dans le PDF.`,
+        "Convention de signe : débit positif (actif, charges), crédit négatif (passif, produits, amortissements et dépréciations). Contrôles par cumul des postes (D = plaquette, E = balance) :",
+        "Cumul des postes du bilan hors résultat (actif net + passif) = résultat de l'exercice (positif = bénéfice)",
+        "Cumul des postes du compte de résultat (négatif = bénéfice)",
+        "Somme des deux cumuls (doit être nulle, à l'arrondi près)"],
+      header: ["Section", "Poste", "Colonne", "Plaquette N", "Balance (FEC)", "Écart", "Statut", "Commentaire", "Libellé lu dans la plaquette", "Page PDF", "Plaquette N-1", "Comptes retenus", "Validation auditeur", "Suivi des versions", "Clé", "Nature"],
+      rows: rows.map((r, i) => [r.sectionLib, r.poste, r.colonne, sgn(r.plaquette, r.sg), sgn(r.balance, r.sg), null, r.statut, r.commentaire, r.libellePlaquette, r.page, sgn(r.n1, r.sg), r.comptes, supP[i].valid, supP[i].suivi, keyP(r), r.nature]),
       formulas: { 5: (rr, r) => r[3] === null || r[3] === "" ? `=E${rr}` : `=E${rr}-D${rr}` },
-      numCols: [3, 4, 5, 10], widths: [90, 250, 95, 95, 105, 85, 150, 300, 220, 55, 95, 420, 160, 260, 40], wrapCols: [7, 13],
+      numCols: [3, 4, 5, 10], widths: [90, 250, 95, 95, 105, 85, 150, 300, 220, 55, 95, 420, 160, 260, 40, 50], wrapCols: [7, 13],
       fills: rows.flatMap((r, i) => [r.total ? { row: i, color: "#F2F2F2" } : null, { row: i, col: 6, ncol: 1, color: STATUS_COLOR[r.statut] || "#FFFFFF" }, supP[i].s ? { row: i, col: 13, ncol: 1, color: STATUS_COLOR[supP[i].s] } : null]).filter(Boolean)
     });
+    {
+      const fr = res.firstRow, lr = fr + rows.length - 1, R = c => `$${c}$${fr}:$${c}$${lr}`;
+      const bil = c => `=SUMIFS(${R(c)},${R("A")},"Bilan*",${R("P")},"Poste",${R("C")},"<>Brut",${R("C")},"<>Amort. / dépréc.",${R("O")},"<>S|P_RES|n")`;
+      const crs = c => `=SUMIFS(${R(c)},${R("A")},"Compte de résultat",${R("P")},"Poste")`;
+      await A.XL.writeCells(SHEETS.pointage, 5, 3, [[bil("D"), bil("E")], [crs("D"), crs("E")], ["=D5+D6", "=E5+E6"]], [], "#,##0.00;-#,##0.00;0.00");
+    }
     const zones = [];
     rows.forEach((r, i) => {
       const row = res.firstRow + i;
-      if (r.box) zones.push({ cell: `D${row}`, file: pdf, page: r.page, rect: r.box, value: r.plaquette, text: `Plaquette p.${r.page} – ${r.poste} (${r.colonne})` });
-      if (r.n1box) zones.push({ cell: `K${row}`, file: pdf, page: r.page, rect: r.n1box, value: r.n1, text: `Plaquette p.${r.page} – ${r.poste} (N-1)` });
+      if (r.box) zones.push({ cell: `D${row}`, file: pdf, page: r.page, rect: r.box, value: sgn(r.plaquette, r.sg), text: `Plaquette p.${r.page} – ${r.poste} (${r.colonne})` });
+      if (r.n1box) zones.push({ cell: `K${row}`, file: pdf, page: r.page, rect: r.n1box, value: sgn(r.n1, r.sg), text: `Plaquette p.${r.page} – ${r.poste} (N-1)` });
     });
     await A.XL.replaceAutoZones(SHEETS.pointage, zones);
     const resA = await A.XL.writeTable(SHEETS.annexe, {
       title: "Pointage de l'annexe",
       subtitle: [`Plaquette : ${pdf} (version V${version}) · annexe lue pages ${annex.pages.length ? annex.pages[0] + " à " + annex.pages[annex.pages.length - 1] : "—"} · ${annex.tables.length} tableau(x) reconnu(s)`,
         `${ca.stats.concordants} contrôle(s) concordant(s), ${ca.stats.ecarts} écart(s). Contrôle : Calcul = additions du tableau ; Comptes annuels = bilan ou compte de résultat ; Balance (FEC) = soldes et mouvements des comptes ; Texte = montant cité dans une phrase.`,
-        "Cliquez sur un montant (colonne D : annexe, colonne G : comptes annuels) pour le voir encadré dans le PDF."],
-      header: ["Note / tableau", "Ligne", "Colonne", "Montant annexe", "Contrôle", "Référence", "Montant de référence", "Écart", "Statut", "Commentaire", "Page annexe", "Page référence", "Validation auditeur", "Suivi des versions", "Clé"],
-      rows: ca.rows.map((r, i) => [r.note, r.ligne, r.colonne, r.annexe, r.controle, r.reference, r.ref, null, r.statut, r.commentaire || "", r.page, r.refPage || "", supA[i].valid, supA[i].suivi, kA[i]]),
+        "Cliquez sur un montant (colonne D : annexe, colonne G : comptes annuels) pour le voir encadré dans le PDF.",
+        "Convention de signe : chaque montant est au signe de ses comptes (débit positif : immobilisations, créances, charges ; crédit négatif : amortissements, provisions, dettes, capitaux propres, produits). Colonne P : sens retenu."],
+      header: ["Note / tableau", "Ligne", "Colonne", "Montant annexe", "Contrôle", "Référence", "Montant de référence", "Écart", "Statut", "Commentaire", "Page annexe", "Page référence", "Validation auditeur", "Suivi des versions", "Clé", "Sens"],
+      rows: ca.rows.map((r, i) => [r.note, r.ligne, r.colonne, sgn(r.annexe, r.sg), r.controle, r.reference, sgn(r.ref, r.sg), null, r.statut, r.commentaire || "", r.page, r.refPage || "", supA[i].valid, supA[i].suivi, kA[i], r.sg < 0 ? "Crédit (−)" : "Débit (+)"]),
       formulas: { 7: (rr, r) => (r[3] === null || r[6] === null) ? "" : `=G${rr}-D${rr}` },
-      numCols: [3, 6, 7], widths: [150, 250, 105, 100, 95, 260, 110, 85, 150, 380, 60, 60, 160, 260, 40], wrapCols: [1, 5, 9, 13],
+      numCols: [3, 6, 7], widths: [150, 250, 105, 100, 95, 260, 110, 85, 150, 380, 60, 60, 160, 260, 40, 70], wrapCols: [1, 5, 9, 13],
       fills: ca.rows.flatMap((r, i) => [{ row: i, col: 8, ncol: 1, color: STATUS_COLOR[r.statut] || "#FFFFFF" }, supA[i].s ? { row: i, col: 13, ncol: 1, color: STATUS_COLOR[supA[i].s] } : null]).filter(Boolean)
     });
     const zonesA = [];
     ca.rows.forEach((r, i) => {
       const row = resA.firstRow + i;
-      if (r.box) zonesA.push({ cell: `D${row}`, file: pdf, page: r.page, rect: r.box, value: r.annexe, text: `Annexe p.${r.page} – ${r.note} – ${r.ligne}`.slice(0, 200) });
-      if (r.refBox && r.refPage) zonesA.push({ cell: `G${row}`, file: pdf, page: r.refPage, rect: r.refBox, value: r.ref, text: `${r.reference} (p.${r.refPage})`.slice(0, 200) });
+      if (r.box) zonesA.push({ cell: `D${row}`, file: pdf, page: r.page, rect: r.box, value: sgn(r.annexe, r.sg), text: `Annexe p.${r.page} – ${r.note} – ${r.ligne}`.slice(0, 200) });
+      if (r.refBox && r.refPage) zonesA.push({ cell: `G${row}`, file: pdf, page: r.refPage, rect: r.refBox, value: sgn(r.ref, r.sg), text: `${r.reference} (p.${r.refPage})`.slice(0, 200) });
     });
     await A.XL.replaceAutoZones(SHEETS.annexe, zonesA);
     t.controles.push({ type: "Annexe", controle: "Lecture de l'annexe", statut: annex.tables.length ? "Info" : "Anomalie", detail: annex.tables.length ? `pages ${annex.pages.join(", ")} · tableaux reconnus : ${annex.tables.map(x => `${x.title || x.type} (p.${x.page})`).join(" ; ")}` : "aucun tableau d'annexe reconnu" });

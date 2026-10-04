@@ -1,6 +1,6 @@
 // Visionneuse PDF (PDF.js embarqué) avec surlignages et tracé de zones (snips).
 import * as pdfjsLib from "../vendor/pdfjs/pdf.min.mjs";
-import { itemBox, norm } from "./extract.js?v=7";
+import { itemBox, norm } from "./extract.js?v=8";
 
 const VENDOR = new URL("../vendor/pdfjs/", import.meta.url).href;
 pdfjsLib.GlobalWorkerOptions.workerSrc = VENDOR + "pdf.worker.min.mjs";

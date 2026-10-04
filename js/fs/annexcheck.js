@@ -1,11 +1,13 @@
 // Contrôles de l'annexe : calculs internes des tableaux, concordance avec les comptes annuels et avec la balance (FEC).
-import { comptesDe, normLabel } from "./pcg.js?v=7";
+import { comptesDe, normLabel } from "./pcg.js?v=8";
 
 const r2 = v => Math.round(v * 100) / 100;
 const eur = v => (v ?? 0).toLocaleString("fr-FR", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 const COLNAME = { debut: "Début d'exercice", aug: "Augmentations", dim: "Diminutions", fin: "Fin d'exercice", ouv: "Ouverture", dot: "Dotations", repu: "Reprises utilisées", repnu: "Reprises non utilisées", rep: "Reprises", clo: "Clôture", brut: "Montant brut", m1: "À un an au plus", p1: "À plus d'un an", p15: "De 1 à 5 ans", p5: "À plus de 5 ans", montant: "Montant", expl: "Exploitation", fin_: "Financier", exc: "Exceptionnel" };
 const cn = k => COLNAME[k] || (k.charAt(0).toUpperCase() + k.slice(1));
 
+const TYPE_SIGN = { immobilisations: 1, amortissements: -1, provisions: -1, creances: 1, dettes: -1, par: 1, cap: -1, cca: 1, pca: -1, effectif: 1, ca: -1, autre: 1 };
+const FACT_SIGN = { totalBilan: 1, benefice: -1, perte: -1, totalDettes: -1, totalCreances: 1, capital: -1, effectif: 1 };
 const GROUPS = {
   incorp: { re: /^immobilisations incorporelles/, postes: ["A_FE", "A_RD", "A_CBL", "A_FC", "A_AII", "A_AAII"], lib: "immobilisations incorporelles" },
   corp: { re: /^immobilisations corporelles(?! en cours)/, postes: ["A_TER", "A_CONS", "A_ITMOI", "A_AIC", "A_ICEC", "A_AAIC"], lib: "immobilisations corporelles" },
@@ -60,7 +62,9 @@ export function checkAnnex(annex, ctx) {
       else statut = o.analyser ? "Écart – à analyser" : "Écart";
     }
     if (statut.startsWith("Concordant")) o.commentaire = o.commentaireOK || "";
-    out.push({ ...o, ecart, statut });
+    // signe comptable de la ligne (débit +, crédit −), appliqué au montant de l'annexe et à sa référence
+    const sg = o.sg ?? (TYPE_SIGN[o.type] ?? 1);
+    out.push({ ...o, ecart, statut, sg });
   };
   const cellOf = (r, k) => r.cells[k] || null;
   const ann = (t, r, k, extra) => { const c = cellOf(r, k); return { note: t.title, type: t.type, page: t.page, ligne: r.label, colonne: cn(k), annexe: c ? c.value : null, box: c ? c.box : null, ...extra }; };
@@ -217,7 +221,7 @@ export function checkAnnex(annex, ctx) {
   // ---- 4) montants cités dans le texte
   const tableTot = (type, k) => { const t = annex.tables.find(t => t.type === type); if (!t) return null; const r = t.rows.find(r => /^total\b/.test(r.nl)); return r?.cells?.[k] ? r.cells[k] : null; };
   for (const f of annex.facts) {
-    const base = { note: "Texte de l'annexe", type: "texte", page: f.page, ligne: f.texte.slice(0, 140), colonne: "", annexe: f.value, box: f.box, controle: "Texte" };
+    const base = { note: "Texte de l'annexe", type: "texte", page: f.page, ligne: f.texte.slice(0, 140), colonne: "", annexe: f.value, box: f.box, controle: "Texte", sg: FACT_SIGN[f.kind] ?? 1 };
     const ref = (id, k, lib) => { const l = matched.get(id); add({ ...base, reference: lib, ref: l?.values?.[k] ?? null, refPage: l?.page, refBox: l?.boxes?.[k], tol: 1 }); };
     if (f.kind === "totalBilan") ref("A_TG", "net", "Bilan – total général (net)");
     if (f.kind === "benefice") ref("P_RES", "n", "Bilan passif – résultat de l'exercice");

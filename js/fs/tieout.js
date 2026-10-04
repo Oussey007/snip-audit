@@ -1,5 +1,5 @@
 // Rapprochement plaquette <-> balance (FEC) et contrôles arithmétiques de la plaquette.
-import { comptesDe, controleAffectation, SECTION_LABEL } from "./pcg.js?v=7";
+import { comptesDe, controleAffectation, SECTION_LABEL } from "./pcg.js?v=8";
 
 const r2 = v => Math.round(v * 100) / 100;
 const eur = v => (v ?? 0).toLocaleString("fr-FR", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
@@ -68,7 +68,9 @@ export function tieOut(postes, balance, matched, fec) {
         plaquette: pv, balance: r2(bv), ecart, statut, commentaire: notes.get(p.id) && k !== "amort" ? notes.get(p.id) : "",
         comptes: p.total ? "" : comptes.slice(0, 25).map(b => `${b.compte} ${b.lib} (${eur(b.solde)})`).join(" ; ") + (comptes.length > 25 ? ` ; … (${comptes.length} comptes)` : ""),
         page: line ? line.page : null, box: line ? line.boxes[k] || null : null, libellePlaquette: line ? line.label : "",
-        n1: line ? (line.values[N1[p.section]] ?? null) : null, n1box: line ? line.boxes[N1[p.section]] || null : null, side: sideSign(p)
+        n1: line ? (line.values[N1[p.section]] ?? null) : null, n1box: line ? line.boxes[N1[p.section]] || null : null, side: sideSign(p),
+        // signe comptable pour les cumuls : débit positif (actif, charges), crédit négatif (passif, produits, amortissements)
+        sg: p.section === "actif" ? (k === "amort" ? -1 : 1) : p.section === "passif" ? -1 : (p.sens || 1), nature: p.total ? "Total" : "Poste"
       });
     }
   }

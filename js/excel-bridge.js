@@ -264,10 +264,10 @@ export async function activateSheet(name, cell) {
 }
 
 // Écrit un bloc de valeurs à partir d'une cellule (ligne 1-based, colonne 0-based) et colore des cellules
-export async function writeCells(name, row, col, values, fills = []) {
+export async function writeCells(name, row, col, values, fills = [], numFmt = null) {
   return Excel.run(async ctx => {
     const ws = ctx.workbook.worksheets.getItem(name);
-    if (values.length) ws.getRangeByIndexes(row - 1, col, values.length, values[0].length).values = values;
+    if (values.length) { const rg = ws.getRangeByIndexes(row - 1, col, values.length, values[0].length); rg.values = values; if (numFmt) { rg.numberFormat = values.map(r => r.map(() => numFmt)); rg.format.font.bold = true; } }
     for (const f of fills) ws.getRange(f.cell).format.fill.color = f.color;
     await ctx.sync();
   });

@@ -1,11 +1,11 @@
 // Volet « Pièces justificatives » : visionneuse liée aux cellules + snips façon DataSnipper.
-import { Viewer } from "./viewer.js?v=7";
-import * as store from "./store.js?v=7";
-import { textInRect, numbersIn, valueFromText, round2, searchVariants } from "./extract.js?v=7";
-import { initFS } from "./fs-ui.js?v=7";
+import { Viewer } from "./viewer.js?v=8";
+import * as store from "./store.js?v=8";
+import { textInRect, numbersIn, valueFromText, round2, searchVariants } from "./extract.js?v=8";
+import { initFS } from "./fs-ui.js?v=8";
 
 const $ = s => document.querySelector(s);
-const XL = window.__MOCK__ ? await import("./excel-mock.js?v=7") : await import("./excel-bridge.js?v=7");
+const XL = window.__MOCK__ ? await import("./excel-mock.js?v=8") : await import("./excel-bridge.js?v=8");
 store.init(XL);
 
 const S = { files: [], liens: new Map(), snips: [], idx: new Map(), zones: [], sel: null, ref: null, tool: null, tabs: [], busy: false };
@@ -213,7 +213,7 @@ async function createSnip(page, rect) {
     let ocr = false;
     if (!text && (type === "texte" || type === "somme")) {
       msg("Zone scannée : lecture OCR en cours…");
-      const { ocrCanvas } = await import("./ocr.js?v=7");
+      const { ocrCanvas } = await import("./ocr.js?v=8");
       text = await ocrCanvas(await viewer.regionCanvas(page, rect)); ocr = true;
     }
     let value;

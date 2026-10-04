@@ -1,6 +1,6 @@
 // Lecture de l'annexe d'une plaquette : pages, tableaux (en-têtes, colonnes, lignes) et montants cités dans le texte.
-import { analysePage, toAmount } from "./plaquette.js?v=7";
-import { normLabel } from "./pcg.js?v=7";
+import { analysePage, toAmount } from "./plaquette.js?v=8";
+import { normLabel } from "./pcg.js?v=8";
 
 const START_TITLES = /^(annexe|regles et methodes comptables|faits caracteristiques|faits marquants|notes sur le bilan|notes sur le compte de resultat|autres informations|engagements|evenements posterieurs|informations complementaires|complements d informations|notes annexes)/;
 const STOP_TITLES = /^(soldes intermediaires|detail des comptes|bilan detaille|compte de resultat detaille|liasse|liste simplifiee|liste des immobilisations|rapport|tableau de financement|tableau des flux|attestation)/;
