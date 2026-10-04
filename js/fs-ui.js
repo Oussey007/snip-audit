@@ -1,14 +1,14 @@
 // Volet « Pointage plaquette » : FEC -> balance -> rapprochement avec le bilan et le compte de résultat de la plaquette.
 import * as pdfjsLib from "../vendor/pdfjs/pdf.min.mjs";
-import { parseFEC } from "./fs/fec.js?v=8";
-import { DEFAULT_POSTES, comptesDe, SECTION_LABEL } from "./fs/pcg.js?v=8";
-import { extractStatements, matchPostes } from "./fs/plaquette.js?v=8";
-import { tieOut } from "./fs/tieout.js?v=8";
-import { readAnnex } from "./fs/annexe.js?v=8";
-import { checkAnnex } from "./fs/annexcheck.js?v=8";
-import { annexPages } from "./fs/annexe.js?v=8";
-import { snapshot, hashItems, compare, parseVersions, versionRows, VERS_HEAD, keyP, keyA } from "./fs/versions.js?v=8";
-import { SEUILS, CHECKLIST, STATUTS, categorie, annexLines, verifyCitation, instructionExcel, dossierConversation, parseReponse } from "./fs/annexai.js?v=8";
+import { parseFEC } from "./fs/fec.js?v=9";
+import { DEFAULT_POSTES, comptesDe, SECTION_LABEL } from "./fs/pcg.js?v=9";
+import { extractStatements, matchPostes } from "./fs/plaquette.js?v=9";
+import { tieOut } from "./fs/tieout.js?v=9";
+import { readAnnex } from "./fs/annexe.js?v=9";
+import { checkAnnex } from "./fs/annexcheck.js?v=9";
+import { annexPages } from "./fs/annexe.js?v=9";
+import { snapshot, hashItems, compare, parseVersions, versionRows, VERS_HEAD, keyP, keyA } from "./fs/versions.js?v=9";
+import { SEUILS, CHECKLIST, STATUTS, categorie, annexLines, verifyCitation, instructionExcel, dossierConversation, parseReponse } from "./fs/annexai.js?v=9";
 
 export const SHEETS = { versions: "_Versions", modifications: "Modifications plaquette", pointage: "Pointage plaquette", annexe: "Pointage annexe", texte: "Annexe texte", conformite: "Conformité annexe", incoherences: "Incohérences annexe", controles: "Contrôles plaquette", balance: "Balance FEC", mapping: "Mapping PCG" };
 const VENDOR = new URL("../vendor/pdfjs/", import.meta.url).href;
@@ -79,6 +79,9 @@ async function pdfPages(name) {
 // ---------- Versions : reprise des validations de l'auditeur pour les lignes inchangées
 function oldValidations(values, firstHeader, cols) {
   const m = new Map(); const h = values ? values.findIndex(r => String(r[0]).trim() === firstHeader) : -1; if (h < 0) return m;
+  // colonnes repérées par leur en-tête (la mise en page peut changer d'une version de l'outil à l'autre)
+  const hdr = values[h].map(x => String(x).trim()); const at = (names, def) => { for (const n of [].concat(names)) { const i = hdr.indexOf(n); if (i >= 0) return i; } return def; };
+  cols = { a: at(cols.aName, cols.a), b: at(cols.bName, cols.b), valid: at("Validation auditeur", cols.valid), key: at("Clé", cols.key) };
   m.signed = values.slice(0, h).some(r => r.some(x => /Convention de signe/.test(String(x))));
   for (const r of values.slice(h + 1)) { const k = String(r[cols.key] ?? "").trim(); if (k) m.set(k, { a: r[cols.a], b: r[cols.b], valid: String(r[cols.valid] ?? "").trim() }); }
   return m;
@@ -123,8 +126,8 @@ async function run() {
     const version = identical ? prev.version : (prev ? prev.version + 1 : 1);
     const cmp = prev && !identical ? compare(prev.items, snap) : null;
     const prevV = prev ? prev.version : null;
-    const oldP = oldValidations(await A.XL.readSheet(SHEETS.pointage), "Section", { a: 3, b: 4, valid: 12, key: 14 });
-    const oldA = oldValidations(await A.XL.readSheet(SHEETS.annexe), "Note / tableau", { a: 3, b: 6, valid: 12, key: 14 });
+    const oldP = oldValidations(await A.XL.readSheet(SHEETS.pointage), "Section", { a: 3, b: 4, valid: 12, key: 14, aName: "Plaquette N", bName: "Balance (FEC)" });
+    const oldA = oldValidations(await A.XL.readSheet(SHEETS.annexe), "Note / tableau", { a: 3, b: 4, valid: 12, key: 14, aName: "Montant annexe", bName: ["Montant de référence", "Montant comptes annuels / référence"] });
     const f2 = v => v === "" || v === null || v === undefined ? "—" : Number(v).toLocaleString("fr-FR", { maximumFractionDigits: 2 });
     const sgn = (v, g) => v === null || v === undefined || v === "" ? v : Math.round(g * v * 100) / 100;
     const supP = t.rows.map(r => suivi(oldP.get(keyP(r)), oldP.signed ? sgn(r.plaquette, r.sg) : r.plaquette, oldP.signed ? sgn(r.balance, r.sg) : r.balance, prevV ?? (oldP.size ? "préc." : null), version, o => `plaquette ${f2(o.a)} · balance ${f2(o.b)}`));
@@ -162,7 +165,7 @@ async function run() {
       header: ["Section", "Poste", "Colonne", "Plaquette N", "Balance (FEC)", "Écart", "Statut", "Commentaire", "Libellé lu dans la plaquette", "Page PDF", "Plaquette N-1", "Comptes retenus", "Validation auditeur", "Suivi des versions", "Clé", "Nature"],
       rows: rows.map((r, i) => [r.sectionLib, r.poste, r.colonne, sgn(r.plaquette, r.sg), sgn(r.balance, r.sg), null, r.statut, r.commentaire, r.libellePlaquette, r.page, sgn(r.n1, r.sg), r.comptes, supP[i].valid, supP[i].suivi, keyP(r), r.nature]),
       formulas: { 5: (rr, r) => r[3] === null || r[3] === "" ? `=E${rr}` : `=E${rr}-D${rr}` },
-      numCols: [3, 4, 5, 10], widths: [90, 250, 95, 95, 105, 85, 150, 300, 220, 55, 95, 420, 160, 260, 40, 50], wrapCols: [7, 13],
+      numCols: [3, 4, 5, 10], widths: [90, 250, 95, 95, 105, 85, 150, 300, 220, 55, 95, 420, 160, 260, 40, 50], wrapCols: [7, 13], autofilter: true,
       fills: rows.flatMap((r, i) => [r.total ? { row: i, color: "#F2F2F2" } : null, { row: i, col: 6, ncol: 1, color: STATUS_COLOR[r.statut] || "#FFFFFF" }, supP[i].s ? { row: i, col: 13, ncol: 1, color: STATUS_COLOR[supP[i].s] } : null]).filter(Boolean)
     });
     {
@@ -182,19 +185,19 @@ async function run() {
       title: "Pointage de l'annexe",
       subtitle: [`Plaquette : ${pdf} (version V${version}) · annexe lue pages ${annex.pages.length ? annex.pages[0] + " à " + annex.pages[annex.pages.length - 1] : "—"} · ${annex.tables.length} tableau(x) reconnu(s)`,
         `${ca.stats.concordants} contrôle(s) concordant(s), ${ca.stats.ecarts} écart(s). Contrôle : Calcul = additions du tableau ; Comptes annuels = bilan ou compte de résultat ; Balance (FEC) = soldes et mouvements des comptes ; Texte = montant cité dans une phrase.`,
-        "Cliquez sur un montant (colonne D : annexe, colonne G : comptes annuels) pour le voir encadré dans le PDF.",
+        "Colonne D : montant lu dans l'annexe ; colonne E : montant de référence (comptes annuels, calcul ou FEC selon la colonne « Contrôle ») ; colonne F : écart. Un clic sur D ou E encadre le montant dans le PDF. Filtrez la colonne « Contrôle » sur « Comptes annuels » pour ne voir que le pointage annexe ↔ bilan et compte de résultat.",
         "Convention de signe : chaque montant est au signe de ses comptes (débit positif : immobilisations, créances, charges ; crédit négatif : amortissements, provisions, dettes, capitaux propres, produits). Colonne P : sens retenu."],
-      header: ["Note / tableau", "Ligne", "Colonne", "Montant annexe", "Contrôle", "Référence", "Montant de référence", "Écart", "Statut", "Commentaire", "Page annexe", "Page référence", "Validation auditeur", "Suivi des versions", "Clé", "Sens"],
-      rows: ca.rows.map((r, i) => [r.note, r.ligne, r.colonne, sgn(r.annexe, r.sg), r.controle, r.reference, sgn(r.ref, r.sg), null, r.statut, r.commentaire || "", r.page, r.refPage || "", supA[i].valid, supA[i].suivi, kA[i], r.sg < 0 ? "Crédit (−)" : "Débit (+)"]),
-      formulas: { 7: (rr, r) => (r[3] === null || r[6] === null) ? "" : `=G${rr}-D${rr}` },
-      numCols: [3, 6, 7], widths: [150, 250, 105, 100, 95, 260, 110, 85, 150, 380, 60, 60, 160, 260, 40, 70], wrapCols: [1, 5, 9, 13],
-      fills: ca.rows.flatMap((r, i) => [{ row: i, col: 8, ncol: 1, color: STATUS_COLOR[r.statut] || "#FFFFFF" }, supA[i].s ? { row: i, col: 13, ncol: 1, color: STATUS_COLOR[supA[i].s] } : null]).filter(Boolean)
+      header: ["Note / tableau", "Ligne", "Colonne", "Montant annexe", "Montant de référence", "Écart", "Statut", "Contrôle", "Référence (source du montant de référence)", "Commentaire", "Page annexe", "Page référence", "Validation auditeur", "Suivi des versions", "Clé", "Sens"],
+      rows: ca.rows.map((r, i) => [r.note, r.ligne, r.colonne, sgn(r.annexe, r.sg), sgn(r.ref, r.sg), null, r.statut, r.controle, r.reference, r.commentaire || "", r.page, r.refPage || "", supA[i].valid, supA[i].suivi, kA[i], r.sg < 0 ? "Crédit (−)" : "Débit (+)"]),
+      formulas: { 5: (rr, r) => (r[3] === null || r[3] === undefined || r[4] === null || r[4] === undefined) ? "" : `=E${rr}-D${rr}` },
+      numCols: [3, 4, 5], widths: [150, 250, 105, 100, 110, 85, 150, 105, 260, 380, 60, 60, 160, 260, 40, 70], wrapCols: [1, 8, 9, 13], autofilter: true,
+      fills: ca.rows.flatMap((r, i) => [{ row: i, col: 6, ncol: 1, color: STATUS_COLOR[r.statut] || "#FFFFFF" }, supA[i].s ? { row: i, col: 13, ncol: 1, color: STATUS_COLOR[supA[i].s] } : null]).filter(Boolean)
     });
     const zonesA = [];
     ca.rows.forEach((r, i) => {
       const row = resA.firstRow + i;
       if (r.box) zonesA.push({ cell: `D${row}`, file: pdf, page: r.page, rect: r.box, value: sgn(r.annexe, r.sg), text: `Annexe p.${r.page} – ${r.note} – ${r.ligne}`.slice(0, 200) });
-      if (r.refBox && r.refPage) zonesA.push({ cell: `G${row}`, file: pdf, page: r.refPage, rect: r.refBox, value: sgn(r.ref, r.sg), text: `${r.reference} (p.${r.refPage})`.slice(0, 200) });
+      if (r.refBox && r.refPage) zonesA.push({ cell: `E${row}`, file: pdf, page: r.refPage, rect: r.refBox, value: sgn(r.ref, r.sg), text: `${r.reference} (p.${r.refPage})`.slice(0, 200) });
     });
     await A.XL.replaceAutoZones(SHEETS.annexe, zonesA);
     t.controles.push({ type: "Annexe", controle: "Lecture de l'annexe", statut: annex.tables.length ? "Info" : "Anomalie", detail: annex.tables.length ? `pages ${annex.pages.join(", ")} · tableaux reconnus : ${annex.tables.map(x => `${x.title || x.type} (p.${x.page})`).join(" ; ")}` : "aucun tableau d'annexe reconnu" });

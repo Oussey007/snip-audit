@@ -1,6 +1,6 @@
 // Analyse du texte de l'annexe par Claude : texte de l'annexe, liste de contrôle, consignes, import de la réponse
 // et vérification des citations (chaque conclusion doit s'appuyer sur un passage réellement présent dans le PDF).
-import { normLabel } from "./pcg.js?v=8";
+import { normLabel } from "./pcg.js?v=9";
 
 // Seuils de taille (décret n° 2024-152 du 28 février 2024, exercices ouverts à compter du 1er janvier 2024) : modifiables dans la feuille Paramètres
 export const SEUILS = { micro: { bilan: 450000, ca: 900000, effectif: 10 }, petite: { bilan: 7500000, ca: 15000000, effectif: 50 }, moyenne: { bilan: 25000000, ca: 50000000, effectif: 250 } };

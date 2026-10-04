@@ -1,5 +1,5 @@
 // Contrôles de l'annexe : calculs internes des tableaux, concordance avec les comptes annuels et avec la balance (FEC).
-import { comptesDe, normLabel } from "./pcg.js?v=8";
+import { comptesDe, normLabel } from "./pcg.js?v=9";
 
 const r2 = v => Math.round(v * 100) / 100;
 const eur = v => (v ?? 0).toLocaleString("fr-FR", { minimumFractionDigits: 2, maximumFractionDigits: 2 });

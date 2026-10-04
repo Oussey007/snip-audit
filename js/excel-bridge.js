@@ -238,6 +238,10 @@ export async function writeTable(name, opts) {
     for (const j of opts.wrapCols || []) if (rows.length) ws.getRangeByIndexes(r0 + 1, j, rows.length, 1).format.wrapText = true;
     ws.freezePanes.freezeRows(r0 + 1);
     await ctx.sync();
+    // filtres automatiques sur l'en-tête (Excel récent ; ignorés si non pris en charge)
+    if (opts.autofilter && rows.length) {
+      try { ws.autoFilter.apply(ws.getRangeByIndexes(r0, 0, rows.length + 1, nc)); await ctx.sync(); } catch (e) { /* version d'Excel sans filtre automatique par Office.js */ }
+    }
     return { headerRow: r0 + 1, firstRow: r0 + 2 };
   });
 }
