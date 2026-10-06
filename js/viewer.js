@@ -1,6 +1,6 @@
 // Visionneuse PDF (PDF.js embarqué) avec surlignages et tracé de zones (snips).
 import * as pdfjsLib from "../vendor/pdfjs/pdf.min.mjs";
-import { itemBox, norm } from "./extract.js?v=9";
+import { itemBox, norm } from "./extract.js?v=10";
 
 const VENDOR = new URL("../vendor/pdfjs/", import.meta.url).href;
 pdfjsLib.GlobalWorkerOptions.workerSrc = VENDOR + "pdf.worker.min.mjs";
@@ -12,7 +12,11 @@ export class Viewer {
     this.hls = []; this.textCache = new Map(); this.drawType = null; this.loadToken = 0;
     this.io = new IntersectionObserver(es => es.forEach(e => { if (e.isIntersecting) this._render(+e.target.dataset.n); }), { root: el, rootMargin: "400px 0px" });
     el.addEventListener("scroll", () => this._reportPage());
-    window.addEventListener("resize", () => { if (this.fit && this.doc) this.fitWidth(); });
+    // largeur variable (liseuse double, fenêtre détachée redimensionnée) : réajustement automatique
+    let rt = null, lastW = 0;
+    const refit = () => { const w = el.clientWidth; if (!w || Math.abs(w - lastW) < 8) return; lastW = w; clearTimeout(rt); rt = setTimeout(() => { if (this.fit && this.doc) this.fitWidth(); }, 120); };
+    if (window.ResizeObserver) new ResizeObserver(refit).observe(el); else window.addEventListener("resize", refit);
+    el.addEventListener("pointerdown", () => this.cb.onActivate && this.cb.onActivate(this), true);
     this.empty("Chargez les pièces (📁) puis sélectionnez une cellule de la table.");
   }
   empty(msg) { this.el.innerHTML = `<div class="empty">${msg}</div>`; this.doc = null; this.name = null; this.pages = []; }

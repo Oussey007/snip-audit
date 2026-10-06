@@ -1,14 +1,14 @@
 // Volet « Pointage plaquette » : FEC -> balance -> rapprochement avec le bilan et le compte de résultat de la plaquette.
 import * as pdfjsLib from "../vendor/pdfjs/pdf.min.mjs";
-import { parseFEC } from "./fs/fec.js?v=9";
-import { DEFAULT_POSTES, comptesDe, SECTION_LABEL } from "./fs/pcg.js?v=9";
-import { extractStatements, matchPostes } from "./fs/plaquette.js?v=9";
-import { tieOut } from "./fs/tieout.js?v=9";
-import { readAnnex } from "./fs/annexe.js?v=9";
-import { checkAnnex } from "./fs/annexcheck.js?v=9";
-import { annexPages } from "./fs/annexe.js?v=9";
-import { snapshot, hashItems, compare, parseVersions, versionRows, VERS_HEAD, keyP, keyA } from "./fs/versions.js?v=9";
-import { SEUILS, CHECKLIST, STATUTS, categorie, annexLines, verifyCitation, instructionExcel, dossierConversation, parseReponse } from "./fs/annexai.js?v=9";
+import { parseFEC } from "./fs/fec.js?v=10";
+import { DEFAULT_POSTES, comptesDe, SECTION_LABEL } from "./fs/pcg.js?v=10";
+import { extractStatements, matchPostes } from "./fs/plaquette.js?v=10";
+import { tieOut } from "./fs/tieout.js?v=10";
+import { readAnnex } from "./fs/annexe.js?v=10";
+import { checkAnnex } from "./fs/annexcheck.js?v=10";
+import { annexPages } from "./fs/annexe.js?v=10";
+import { snapshot, hashItems, compare, parseVersions, versionRows, VERS_HEAD, keyP, keyA } from "./fs/versions.js?v=10";
+import { SEUILS, CHECKLIST, STATUTS, categorie, annexLines, verifyCitation, instructionExcel, dossierConversation, parseReponse } from "./fs/annexai.js?v=10";
 
 export const SHEETS = { versions: "_Versions", modifications: "Modifications plaquette", pointage: "Pointage plaquette", annexe: "Pointage annexe", texte: "Annexe texte", conformite: "Conformité annexe", incoherences: "Incohérences annexe", controles: "Contrôles plaquette", balance: "Balance FEC", mapping: "Mapping PCG" };
 const VENDOR = new URL("../vendor/pdfjs/", import.meta.url).href;

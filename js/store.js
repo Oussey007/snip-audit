@@ -32,3 +32,5 @@ export async function getFile(name) {
 }
 export async function deleteFile(name) { cache.delete(name); return XL.deletePiece(name); }
 export async function clearFiles() { cache.clear(); return XL.clearPieces(); }
+// Base64 d'une pièce (pour la fenêtre détachée de la liseuse)
+export async function getB64(name) { const b = await getFile(name); return b ? toB64(b) : null; }

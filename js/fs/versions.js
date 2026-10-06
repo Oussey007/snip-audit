@@ -1,6 +1,6 @@
 // Versions successives d'une plaquette : instantané des montants lus et du texte de l'annexe, comparaison avec la version
 // précédente, et reprise des validations de l'auditeur pour tout ce qui n'a pas bougé.
-import { normLabel } from "./pcg.js?v=9";
+import { normLabel } from "./pcg.js?v=10";
 
 const nz = s => String(s ?? "").normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase().replace(/[^a-z0-9]+/g, " ").trim();
 const num = v => (v === null || v === undefined || v === "") ? "" : Math.round(Number(v) * 100) / 100;

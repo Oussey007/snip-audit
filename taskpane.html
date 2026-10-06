@@ -5,7 +5,7 @@
 <meta http-equiv="X-UA-Compatible" content="IE=Edge">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Pièces justificatives – Snips</title>
-<link rel="stylesheet" href="taskpane.css?v=9">
+<link rel="stylesheet" href="taskpane.css?v=10">
 <!-- Office.js : bibliothèque Microsoft obligatoire pour tout add-in (chargée par Excel) -->
 <script src="https://appsforoffice.microsoft.com/lib/1/hosted/office.js"></script>
 </head>
@@ -46,10 +46,12 @@
     <span id="zoomInfo" class="muted">100 %</span>
     <button id="zoomIn" class="btn small" title="Zoom +">+</button>
     <button id="zoomFit" class="btn small" title="Ajuster à la largeur">↔</button>
+    <button id="btnDetach" class="btn small" title="Détacher la liseuse dans une fenêtre (déplaçable sur un second écran)">⧉ Détacher</button>
   </div>
   <div id="msg" class="msg" role="status" aria-live="polite"></div>
 </header>
-<main id="viewer" tabindex="0"></main>
+<main id="reader"></main>
+<div id="detachedNote" class="empty" hidden>La liseuse est détachée dans une fenêtre séparée.<br><button id="btnAttach" class="btn small">⤓ Rattacher</button></div>
 <aside id="piecePanel" class="panel" hidden>
   <div class="row"><strong>Pièces de ce classeur</strong><span class="spacer"></span><button id="closePieces" class="btn small">✕</button></div>
   <p class="muted">Les pièces sont enregistrées dans le fichier Excel (comme les snips). Pensez à enregistrer le classeur (Ctrl+S) après un ajout ou une suppression.</p>
@@ -84,6 +86,6 @@
   <div id="aiResult"></div>
   <div id="fsResult"></div>
 </aside>
-<script type="module" src="js/app.js?v=9"></script>
+<script type="module" src="js/app.js?v=10"></script>
 </body>
 </html>

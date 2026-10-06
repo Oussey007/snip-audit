@@ -1,14 +1,15 @@
 // Volet « Pièces justificatives » : visionneuse liée aux cellules + snips façon DataSnipper.
-import { Viewer } from "./viewer.js?v=9";
-import * as store from "./store.js?v=9";
-import { textInRect, numbersIn, valueFromText, round2, searchVariants } from "./extract.js?v=9";
-import { initFS } from "./fs-ui.js?v=9";
+import { Split, buildModel } from "./split.js?v=10";
+import * as detach from "./detach.js?v=10";
+import * as store from "./store.js?v=10";
+import { textInRect, numbersIn, valueFromText, round2, searchVariants } from "./extract.js?v=10";
+import { initFS } from "./fs-ui.js?v=10";
 
 const $ = s => document.querySelector(s);
-const XL = window.__MOCK__ ? await import("./excel-mock.js?v=9") : await import("./excel-bridge.js?v=9");
+const XL = window.__MOCK__ ? await import("./excel-mock.js?v=10") : await import("./excel-bridge.js?v=10");
 store.init(XL);
 
-const S = { files: [], liens: new Map(), snips: [], idx: new Map(), zones: [], sel: null, ref: null, tool: null, tabs: [], busy: false };
+const S = { files: [], liens: new Map(), snips: [], idx: new Map(), zones: [], sel: null, ref: null, tool: null, tabs: [], busy: false, wp: new Set(), det: null };
 const LABEL = { texte: "T", somme: "Σ", valide: "✓", exception: "✗", auto: "◆" };
 // Index des snips par cellule (manuels d'abord, puis zones automatiques)
 function indexSnips() {
@@ -16,7 +17,7 @@ function indexSnips() {
   for (const s of S.snips) { const k = s.sheet + "|" + s.cell; if (!S.idx.has(k)) S.idx.set(k, []); S.idx.get(k).push(s); }
   for (const l of S.idx.values()) l.sort((a, b) => (a.type === "auto") - (b.type === "auto"));
 }
-async function loadSnips() { S.snips = await XL.readSnips(); indexSnips(); }
+async function loadSnips() { S.snips = await XL.readSnips(); indexSnips(); S.wp = new Set(S.snips.filter(s => s.pane).map(s => s.sheet)); }
 const manual = () => S.snips.filter(s => s.type !== "auto");
 const TYPE_FR = { texte: "texte", somme: "somme", valide: "validation", exception: "exception" };
 
@@ -25,11 +26,15 @@ const fmt = v => typeof v === "number" ? v.toLocaleString("fr-FR", { minimumFrac
 const esc = s => String(s ?? "").replace(/[&<>"]/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
 const base = p => String(p).split(/[\\/]/).pop();
 
-const viewer = new Viewer($("#viewer"), {
-  onRect: (page, rect) => createSnip(page, rect).catch(e => msg("Snip impossible : " + e.message, "err")),
-  onPage: (n, t) => { $("#pageInfo").textContent = `p. ${n} / ${t}`; },
-  onZoom: s => { $("#zoomInfo").textContent = Math.round(s * 100) + " %"; }
+// Liseuse : simple (pièces justificatives) ou double (feuille de pointage : montant pointé à gauche, source à droite)
+const split = new Split($("#reader"), {
+  getFile: n => store.getFile(n),
+  onRect: (v, page, rect) => createSnip(v, page, rect).catch(e => msg("Snip impossible : " + e.message, "err")),
+  onPage: (v, n, t) => { if (v === split.active) $("#pageInfo").textContent = `p. ${n} / ${t}`; },
+  onZoom: (v, s) => { if (v === split.active) $("#zoomInfo").textContent = Math.round(s * 100) + " %"; },
+  onActive: v => { $("#pageInfo").textContent = v.numPages ? `p. ${v.currentPage()} / ${v.numPages}` : "–"; $("#zoomInfo").textContent = Math.round(v.scale * 100) + " %"; }
 });
+const viewer = split.left;
 
 // ---------- Pièces (enregistrées dans le classeur)
 const ko = n => n >= 1e6 ? (n / 1e6).toLocaleString("fr-FR", { maximumFractionDigits: 1 }) + " Mo" : Math.max(1, Math.round(n / 1e3)) + " Ko";
@@ -92,6 +97,7 @@ $("#btnClearPieces").addEventListener("click", e => armConfirm(e.currentTarget, 
 }));
 
 async function openDoc(name, page = 1, rect = null) {
+  split.single();
   const blob = await store.getFile(name);
   if (!blob) {
     if (!S.files.length) { msg("Aucune pièce dans ce classeur : cliquez sur 📁 Pièces pour ajouter celles du dossier (ex. « pièces triées »)."); viewer.empty("Aucune pièce dans ce classeur. Cliquez sur 📁 Pièces pour ajouter les pièces de ce dossier."); }
@@ -167,6 +173,23 @@ async function onSelection() {
   S.ref = ref; S.tabs = ref ? S.liens.get(ref) : [];
   S.zones = zones; searchHits = [];
 
+  // 0) feuille de pointage de la plaquette : liseuse double (montant à gauche, source du contrôle à droite)
+  const paned = zones.filter(z => z.pane);
+  const head = `<b>${esc(sel.sheet)}!${esc(sel.cell)}</b> ${hdr ? "· " + esc(hdr.slice(0, 60)) : ""} · ${esc(fmt(sel.value)).slice(0, 80)}`;
+  if (paned.length) {
+    const model = buildModel(paned, zones.filter(z => !z.pane && z.type !== "auto"));
+    const note = model.groups.length ? `Source du contrôle : ${model.groups.map(g => g.label).join(" · ")}` : "";
+    if (S.det) { S.det.send({ t: "show", head, model, note }); return; }
+    await split.show(model); msg(note);
+    return;
+  }
+  if (S.det) {
+    S.det.send(zones.length ? { t: "show", head, model: { L: [], groups: [], manual: zones.map(z => ({ file: z.file, page: z.page, rect: z.rect, type: z.type, cell: z.cell })) } }
+                            : { t: "show", head, note: "Pas de zone liée à cette cellule." });
+    return;
+  }
+  split.single();
+  if (S.wp.has(sel.sheet) && !zones.length) { msg("Pas de zone liée à cette cellule."); return; }   // pas de recherche « au hasard » dans la feuille de pointage
   // 1) la cellule a des zones (snip manuel ou zone automatique) → pièce + zone(s) encadrée(s)
   if (zones.length) {
     const z = zones[0];
@@ -197,38 +220,41 @@ async function onSelection() {
 function setTool(type) {
   S.tool = S.tool === type ? null : type;
   document.querySelectorAll(".tool").forEach(b => b.classList.toggle("active", b.dataset.type === S.tool));
-  viewer.setDrawMode(S.tool);
-  if (S.tool) msg(viewer.name ? `Snip ${TYPE_FR[S.tool]} : encadrez la zone sur la pièce. Elle sera liée à la cellule sélectionnée dans Excel.` : "Ouvrez d'abord une pièce.", viewer.name ? "" : "err");
+  split.setDrawMode(S.tool);
+  if (S.det) S.det.send({ t: "tool", tool: S.tool });
+  if (S.tool) msg(S.det || viewer.name ? `Snip ${TYPE_FR[S.tool]} : encadrez la zone sur la pièce. Elle sera liée à la cellule sélectionnée dans Excel.` : "Ouvrez d'abord une pièce.", viewer.name ? "" : "err");
   else msg("");
 }
 document.querySelectorAll(".tool").forEach(b => b.addEventListener("click", () => setTool(b.dataset.type)));
 
-async function createSnip(page, rect) {
+// v : liseuse où la zone a été tracée ; fenêtre détachée : v = null, fichier et texte fournis par la fenêtre
+async function createSnip(v, page, rect, ext = null) {
   if (S.busy) return; S.busy = true;
   try {
     const sel = await XL.getSelection();
     if (sel.sheet === XL.SNIP_SHEET || sel.sheet === XL.PIECE_SHEET) throw new Error("sélectionnez une cellule de la table");
-    const type = S.tool;
-    let text = textInRect(await viewer.textItems(page), rect);
+    const type = ext ? ext.tool : S.tool;
+    const file = ext ? ext.file : v.name;
+    let text = ext ? (ext.text || "") : textInRect(await v.textItems(page), rect);
     let ocr = false;
-    if (!text && (type === "texte" || type === "somme")) {
+    if (!text && !ext && (type === "texte" || type === "somme")) {
       msg("Zone scannée : lecture OCR en cours…");
-      const { ocrCanvas } = await import("./ocr.js?v=9");
-      text = await ocrCanvas(await viewer.regionCanvas(page, rect)); ocr = true;
+      const { ocrCanvas } = await import("./ocr.js?v=10");
+      text = await ocrCanvas(await v.regionCanvas(page, rect)); ocr = true;
     }
     let value;
     if (type === "texte") { if (!text) throw new Error("aucun texte lisible dans la zone"); value = valueFromText(text); }
     else if (type === "somme") { const n = numbersIn(text); if (!n.length) throw new Error("aucun montant dans la zone"); value = round2(n.reduce((a, b) => a + b, 0)); }
     else value = type === "valide" ? "✓" : "✗";
-    const rec = { id: (crypto.randomUUID ? crypto.randomUUID() : String(Date.now())), sheet: sel.sheet, cell: sel.cell, type, file: viewer.name, page, rect: rect.map(x => Math.round(x * 100) / 100), value, text: text + (ocr ? " [OCR]" : ""), date: new Date().toLocaleString("fr-FR") };
+    const rec = { id: (crypto.randomUUID ? crypto.randomUUID() : String(Date.now())), sheet: sel.sheet, cell: sel.cell, type, file, page, rect: rect.map(x => Math.round(x * 100) / 100), value, text: text + (ocr ? " [OCR]" : ""), date: new Date().toLocaleString("fr-FR") };
     const res = await XL.saveSnip(rec, value);
     await loadSnips();
-    paintHighlights({ page, rect: rec.rect });
+    if (!split.double && !S.det) paintHighlights({ page, rect: rec.rect });
     let t = `Snip ${TYPE_FR[type]} → ${sel.sheet}!${sel.cell}`;
     if (type === "texte" || type === "somme") t += ` = ${fmt(value)}`;
     if (!res.written && res.hasFormula) t += " (la cellule contient une formule : valeur non écrite, zone liée)";
     if (ocr) t += " · OCR : vérifiez la valeur";
-    msg(t, "ok");
+    msg(t, "ok"); if (S.det) S.det.send({ t: "msg", text: t, kind: "ok" });
     $("#cellInfo").lastChild && onSelectionInfoOnly();
   } finally { S.busy = false; }
 }
@@ -254,11 +280,38 @@ $("#btnSnips").addEventListener("click", async () => { await loadSnips(); render
 $("#closeSnips").addEventListener("click", () => { $("#snipPanel").hidden = true; });
 
 // ---------- Navigation
-$("#prevPage").onclick = () => viewer.goto(viewer.currentPage() - 1);
-$("#nextPage").onclick = () => viewer.goto(viewer.currentPage() + 1);
-$("#zoomIn").onclick = () => viewer.zoom(1.2);
-$("#zoomOut").onclick = () => viewer.zoom(1 / 1.2);
-$("#zoomFit").onclick = () => viewer.fitWidth();
+$("#prevPage").onclick = () => split.active.goto(split.active.currentPage() - 1);
+$("#nextPage").onclick = () => split.active.goto(split.active.currentPage() + 1);
+$("#zoomIn").onclick = () => split.active.zoom(1.2);
+$("#zoomOut").onclick = () => split.active.zoom(1 / 1.2);
+$("#zoomFit").onclick = () => split.active.fitWidth();
+
+// ---------- Liseuse détachée (fenêtre déplaçable sur un second écran)
+function setDetached(on) {
+  $("#reader").hidden = on; $("#detachedNote").hidden = !on;
+  $("#btnDetach").textContent = on ? "⤓ Rattacher" : "⧉ Détacher";
+}
+async function toggleDetach() {
+  if (S.det) { S.det.close(); return; }
+  try {
+    msg("Ouverture de la liseuse détachée…");
+    S.det = await detach.open({
+      getB64: n => store.getB64(n),
+      onMessage: m => {
+        if (m.t === "snip") createSnip(null, m.page, m.rect, m).catch(e => { msg("Snip impossible : " + e.message, "err"); S.det && S.det.send({ t: "msg", text: "Snip impossible : " + e.message, kind: "err" }); });
+        else if (m.t === "tool") { S.tool = m.tool; document.querySelectorAll(".tool").forEach(b => b.classList.toggle("active", b.dataset.type === S.tool)); }
+        else if (m.t === "close") S.det && S.det.close();
+      },
+      onClosed: () => { S.det = null; setDetached(false); msg("Liseuse rattachée au volet."); onSelection().catch(() => {}); }
+    });
+    setDetached(true);
+    msg("Liseuse détachée : déplacez la fenêtre sur votre second écran. Les cellules sélectionnées dans Excel s'y affichent.", "ok");
+    if (S.tool) S.det.send({ t: "tool", tool: S.tool });
+    await onSelection();
+  } catch (e) { S.det = null; setDetached(false); msg("Détachement impossible : " + e.message, "err"); }
+}
+$("#btnDetach").onclick = toggleDetach;
+$("#btnAttach").onclick = () => S.det && S.det.close();
 
 // ---------- Pointage de la plaquette (FEC / balance <-> bilan et compte de résultat)
 initFS({ XL, store, viewer, openDoc, msg, addFiles, reloadSnips: async () => { await loadSnips(); paintHighlights(null); } });
@@ -278,4 +331,4 @@ initFS({ XL, store, viewer, openDoc, msg, addFiles, reloadSnips: async () => { a
     window.__app_ready = true;
   } catch (e) { msg("Erreur au démarrage : " + e.message, "err"); window.__app_error = e.message; }
 })();
-window.__app = { S, viewer, createSnip, onSelection, setTool, openDoc };
+window.__app = { S, viewer, split, createSnip, onSelection, setTool, openDoc };

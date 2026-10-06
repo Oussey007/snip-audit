@@ -2,7 +2,8 @@
 // Passerelle Excel (Office.js). Toutes les données des snips sont stockées DANS le classeur (feuille masquée « _Snips »),
 // ce qui les rend portables (Windows, Mac, Excel en ligne) et auditables.
 export const SNIP_SHEET = "_Snips";
-const SNIP_HEAD = ["ID", "Feuille", "Cellule", "Type", "Fichier", "Page", "X1", "Y1", "X2", "Y2", "Valeur", "Texte extrait", "Date", "Remplissage initial"];
+// Panneau : G (montant pointé, liseuse de gauche) ou D (source du contrôle, liseuse de droite) ; Source : libellé de l'onglet de droite
+const SNIP_HEAD = ["ID", "Feuille", "Cellule", "Type", "Fichier", "Page", "X1", "Y1", "X2", "Y2", "Valeur", "Texte extrait", "Date", "Remplissage initial", "Panneau", "Source"];
 export const COLORS = { texte: "#DDEBF7", somme: "#E4DFEC", valide: "#C6EFCE", exception: "#FFC7CE" };
 export const BORDER = { texte: "#2F80ED", somme: "#7030A0", valide: "#1E9E4A", exception: "#E02424" };
 
@@ -62,7 +63,7 @@ export async function readSnips() {
   return Excel.run(async ctx => {
     const v = await sheetValues(ctx, SNIP_SHEET);
     if (!v || v.length < 2) return [];
-    return v.slice(1).filter(r => r[0]).map(r => ({ id: String(r[0]), sheet: String(r[1]), cell: String(r[2]), type: String(r[3]), file: String(r[4]), page: +r[5], rect: [+r[6], +r[7], +r[8], +r[9]], value: r[10], text: String(r[11] || ""), date: String(r[12] || ""), prevFill: String(r[13] || "") }));
+    return v.slice(1).filter(r => r[0]).map(r => ({ id: String(r[0]), sheet: String(r[1]), cell: String(r[2]), type: String(r[3]), file: String(r[4]), page: +r[5], rect: [+r[6], +r[7], +r[8], +r[9]], value: r[10], text: String(r[11] || ""), date: String(r[12] || ""), prevFill: String(r[13] || ""), pane: String(r[14] || "").toUpperCase(), source: String(r[15] || "") }));
   });
 }
 

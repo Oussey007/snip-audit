@@ -1,0 +1,37 @@
+<!doctype html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<meta http-equiv="X-UA-Compatible" content="IE=Edge">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Liseuse – pointage de la plaquette</title>
+<link rel="stylesheet" href="taskpane.css?v=10">
+<script src="https://appsforoffice.microsoft.com/lib/1/hosted/office.js"></script>
+</head>
+<body class="detached">
+<header id="top">
+  <div class="row">
+    <span id="cell" class="cellinfo grow">En attente d'une sélection dans Excel…</span>
+  </div>
+  <div class="row tools" role="toolbar" aria-label="Outils">
+    <button class="tool" data-type="texte" title="Snip texte : recopie la valeur encadrée dans la cellule sélectionnée">T Texte</button>
+    <button class="tool" data-type="somme" title="Snip somme : additionne les montants encadrés">Σ Somme</button>
+    <button class="tool" data-type="valide" title="Snip validation">✓ Validé</button>
+    <button class="tool" data-type="exception" title="Snip exception">✗ Exception</button>
+    <span class="spacer"></span>
+    <button id="prevPage" class="btn small" title="Page précédente (liseuse active)">◀</button>
+    <span id="pageInfo" class="muted">–</span>
+    <button id="nextPage" class="btn small" title="Page suivante (liseuse active)">▶</button>
+    <button id="zoomOut" class="btn small" title="Zoom -">−</button>
+    <span id="zoomInfo" class="muted">100 %</span>
+    <button id="zoomIn" class="btn small" title="Zoom +">+</button>
+    <button id="zoomFit" class="btn small" title="Ajuster à la largeur">↔</button>
+    <button id="layout" class="btn small" title="Côte à côte / l'une au-dessus de l'autre">⇆ / ⇅</button>
+    <button id="attach" class="btn small" title="Fermer cette fenêtre et revenir à la liseuse du volet">⤓ Rattacher</button>
+  </div>
+  <div id="msg" class="msg" role="status" aria-live="polite"></div>
+</header>
+<main id="reader"></main>
+<script type="module" src="js/reader.js?v=10"></script>
+</body>
+</html>

@@ -1,5 +1,5 @@
 // Rapprochement plaquette <-> balance (FEC) et contrôles arithmétiques de la plaquette.
-import { comptesDe, controleAffectation, SECTION_LABEL } from "./pcg.js?v=9";
+import { comptesDe, controleAffectation, SECTION_LABEL } from "./pcg.js?v=10";
 
 const r2 = v => Math.round(v * 100) / 100;
 const eur = v => (v ?? 0).toLocaleString("fr-FR", { minimumFractionDigits: 2, maximumFractionDigits: 2 });

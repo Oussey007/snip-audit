@@ -27,7 +27,21 @@ header{background:var(--panel);border-bottom:1px solid var(--line);padding:6px 8
 select{flex:1;min-width:0;padding:3px;border:1px solid var(--line);border-radius:4px;font:inherit;background:#fff}
 .msg{font-size:11px;color:var(--muted);height:28px;overflow:hidden;line-height:14px}
 .msg.err{color:var(--exception)}.msg.ok{color:var(--valide)}
-main#viewer{flex:1 1 auto;overflow:auto;padding:8px;position:relative;outline:none}
+main#reader{flex:1 1 auto;min-height:0;display:flex;flex-direction:column;gap:4px}
+main#reader.side.double{flex-direction:row}
+.pane{flex:1 1 0;min-height:0;min-width:0;display:flex;flex-direction:column;border:2px solid transparent;border-radius:4px}
+.pane[hidden]{display:none}
+#reader.double .pane.active{border-color:#9db7e0}
+.pane .ph{display:flex;align-items:center;gap:4px;flex-wrap:wrap;padding:2px 6px;background:#fff;border-bottom:1px solid var(--line);font-size:11px}
+.pane .ph[hidden]{display:none}
+.pane .ph .pt{font-weight:700;color:var(--navy)}
+.pane .ph .pl{color:var(--muted)}
+.rtab{border:1px solid var(--auto);color:var(--auto);background:#fff;border-radius:12px;padding:1px 8px;cursor:pointer;font:inherit;font-size:11px}
+.rtab.active{background:var(--auto);color:#fff}
+.rtab .n{opacity:.8}
+.viewer{flex:1 1 auto;min-height:0;overflow:auto;padding:8px;position:relative;outline:none}
+#detachedNote{flex:1}
+body.detached header .grow{flex:1}
 .page{position:relative;margin:0 auto 10px;background:#fff;box-shadow:0 1px 4px rgba(0,0,0,.25)}
 .page canvas{display:block;width:100%;height:100%}
 .page .lbl{position:absolute;top:-1px;right:4px;font-size:10px;color:var(--muted)}

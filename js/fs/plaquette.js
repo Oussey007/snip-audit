@@ -1,7 +1,7 @@
 // Lecture des états financiers d'une plaquette PDF (bilan actif, bilan passif, compte de résultat).
 // Entrée : pages au format { n, width, height, items:[{str, x, y, w, h}] } (coordonnées PDF, origine en bas à gauche),
 // obtenues avec pdf.js (getTextContent). Module sans dépendance au navigateur : testable seul.
-import { normLabel } from "./pcg.js?v=9";
+import { normLabel } from "./pcg.js?v=10";
 
 export const SECTION_TITLES = {
   actif: ["bilan actif", "bilan actif suite", "actif", "bilan - actif", "bilan (actif)"],
